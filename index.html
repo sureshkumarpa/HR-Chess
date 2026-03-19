@@ -282,8 +282,88 @@
   .dot.waiting { background: #ff9800; animation: pulse 1s ease-in-out infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
-  /* ===== PROMOTION MODAL ===== */
-  #promo-modal {
+  /* ===== CHAT BOX ===== */
+  #chat-section { display:none; flex-direction:column; gap:6px; }
+  #chat-section.visible { display:flex; }
+  .chat-messages {
+    height: 160px; overflow-y: auto; background: var(--captured-bg);
+    border-radius: 6px; padding: 8px; display:flex; flex-direction:column; gap:5px;
+  }
+  .chat-messages::-webkit-scrollbar { width: 3px; }
+  .chat-messages::-webkit-scrollbar-thumb { background: var(--panel-border); border-radius:2px; }
+  .chat-bubble { max-width:100%; word-break:break-word; font-size:0.82rem; line-height:1.4; }
+  .chat-bubble .chat-who { font-family:'Playfair Display',serif; font-size:0.75rem; margin-bottom:1px; }
+  .chat-bubble.me .chat-who { color:var(--accent); text-align:right; }
+  .chat-bubble.them .chat-who { color:var(--text-muted); }
+  .chat-bubble .chat-text {
+    padding: 5px 8px; border-radius: 8px; display:inline-block; max-width:100%;
+  }
+  .chat-bubble.me { text-align:right; }
+  .chat-bubble.me .chat-text { background: #5c3a10; color: var(--text); border-radius:8px 8px 2px 8px; }
+  .chat-bubble.them .chat-text { background: var(--panel); color: var(--text); border-bottom-right-radius:0; border-radius:8px 8px 8px 2px; border:1px solid var(--panel-border); }
+  .chat-bubble.system { text-align:center; }
+  .chat-bubble.system .chat-text { background:transparent; color:var(--text-muted); font-style:italic; font-size:0.78rem; }
+  .chat-input-row { display:flex; gap:5px; }
+  .chat-input-row input {
+    flex:1; padding:6px 8px; border:1px solid var(--panel-border);
+    background:var(--captured-bg); color:var(--text); border-radius:5px;
+    font-family:'Crimson Text',serif; font-size:0.88rem;
+  }
+  .chat-input-row input:focus { outline:none; border-color:var(--accent); }
+  .chat-send-btn {
+    padding:6px 10px; border:1px solid var(--panel-border); background:var(--btn);
+    color:var(--text); border-radius:5px; cursor:pointer; font-size:0.85rem;
+    transition:background 0.12s; flex-shrink:0;
+  }
+  .chat-send-btn:hover { background:var(--btn-hover); }
+  .chat-mic-btn {
+    padding:6px 9px; border:1px solid var(--panel-border); background:var(--btn);
+    color:var(--text); border-radius:5px; cursor:pointer; font-size:0.85rem;
+    transition:background 0.12s; flex-shrink:0;
+  }
+  .chat-mic-btn:hover { background:var(--btn-hover); }
+  .chat-mic-btn.recording { background:#8b2020; border-color:#cf6060; animation:recpulse 0.8s ease-in-out infinite; }
+  @keyframes recpulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+  .voice-msg-bubble { display:flex; align-items:center; gap:6px; cursor:pointer; }
+  .voice-msg-bubble .play-btn { font-size:1rem; }
+  .voice-msg-bubble .voice-duration { font-size:0.75rem; color:var(--text-muted); }
+  .voice-msg-bubble .voice-bar-viz {
+    display:flex; align-items:center; gap:2px; height:18px;
+  }
+  .voice-msg-bubble .voice-bar-viz span {
+    display:inline-block; width:3px; border-radius:2px; background:var(--accent);
+  }
+  .chat-unread {
+    display:none; background:var(--accent); color:#1a0a00;
+    border-radius:50%; width:16px; height:16px; font-size:0.7rem;
+    align-items:center; justify-content:center; font-weight:700; margin-left:4px;
+  }
+  .chat-unread.show { display:inline-flex; }
+
+  /* ===== VOICE CHAT ===== */
+  #voice-bar {
+    display:none; align-items:center; justify-content:space-between;
+    background:var(--captured-bg); border-radius:6px; padding:6px 10px;
+    border:1px solid var(--panel-border); margin-top:4px;
+  }
+  #voice-bar.visible { display:flex; }
+  .voice-status { font-size:0.8rem; color:var(--text-muted); font-style:italic; flex:1; }
+  .voice-status.active { color:#6dbf6d; font-style:normal; }
+  .voice-status.calling { color:var(--accent); }
+  .voice-btn {
+    padding:5px 10px; border-radius:5px; border:1px solid var(--panel-border);
+    background:var(--btn); color:var(--text); cursor:pointer;
+    font-size:0.82rem; transition:background 0.12s; white-space:nowrap;
+  }
+  .voice-btn:hover { background:var(--btn-hover); }
+  .voice-btn.active { background:#2d5a2d; border-color:#4caf50; color:#a8e6a8; }
+  .voice-btn.muted { background:#5a2d2d; border-color:#cf6060; color:#e6a8a8; }
+  .voice-indicator {
+    display:inline-block; width:8px; height:8px; border-radius:50%;
+    background:#4caf50; margin-right:5px;
+    animation:voicepulse 0.8s ease-in-out infinite;
+  }
+  @keyframes voicepulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.7)} }
     display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75);
     align-items: center; justify-content: center; z-index: 100;
   }
@@ -422,9 +502,21 @@
   <div id="online-options">
     <h3>Online Game</h3>
     <div class="online-btns">
-      <button class="diff-btn" onclick="createRoom()">Create Room</button>
+      <button class="diff-btn" onclick="showCreateRoom()">Create Room</button>
       <button class="diff-btn" onclick="showJoinRoom()">Join Room</button>
     </div>
+
+    <!-- Create Room color picker (hidden until Create Room clicked) -->
+    <div id="create-room-row" style="display:none; margin-bottom:10px;">
+      <p style="color:var(--text-muted);font-size:.9rem;margin-bottom:8px;">I want to play as:</p>
+      <div class="color-btns" style="margin-bottom:10px;">
+        <button class="color-btn sel" id="online-white-btn" onclick="selOnlineColor('w',this)">White ♔</button>
+        <button class="color-btn" id="online-black-btn" onclick="selOnlineColor('b',this)">Black ♚</button>
+        <button class="color-btn" id="online-rand-btn" onclick="selOnlineColor('r',this)">Random 🎲</button>
+      </div>
+      <button class="diff-btn" onclick="createRoom()" style="width:100%;">Create Room</button>
+    </div>
+
     <div id="join-row" class="room-input" style="display:none">
       <input id="join-code" type="text" maxlength="6" placeholder="Room code"
         autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false"
@@ -484,12 +576,51 @@
           <div class="share-code" id="room-code-display">------</div>
           <button class="copy-btn" onclick="copyCode()">Copy Code</button>
         </div>
-        <div class="online-status"><span class="dot waiting" id="conn-dot"></span><span id="conn-status">Waiting for opponent...</span></div>
+        <!-- Color display + swap -->
+        <div id="color-info" style="margin-top:6px; font-size:0.85rem; color:var(--text-muted); text-align:center; font-style:italic;">
+          <span id="my-color-label"></span>
+        </div>
+        <button id="swap-btn" onclick="requestSwap()"
+          style="display:none; width:100%; margin-top:6px; padding:6px; border:1px solid var(--panel-border);
+          background:var(--btn); color:var(--text); border-radius:5px; cursor:pointer;
+          font-family:'Crimson Text',serif; font-size:0.9rem;">
+          🔄 Swap Colors
+        </button>
+        <div id="swap-msg" style="font-size:0.8rem; color:var(--accent); text-align:center; min-height:16px; margin-top:4px;"></div>
+        <div class="online-status" style="margin-top:6px;"><span class="dot waiting" id="conn-dot"></span><span id="conn-status">Waiting for opponent...</span></div>
+
+        <!-- Voice chat bar -->
+        <div id="voice-bar">
+          <span class="voice-status" id="voice-status">🎤 Voice chat</span>
+          <div style="display:flex;gap:4px;flex-shrink:0;">
+            <button class="voice-btn" id="mute-btn" onclick="toggleMute()" style="display:none;" title="Mute/Unmute">🔇</button>
+            <button class="voice-btn" id="voice-btn" onclick="toggleVoice()">📞 Call</button>
+          </div>
+        </div>
       </div>
 
       <div>
-        <div class="panel-section-title">Move History</div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+          <div class="panel-section-title" style="margin-bottom:0; border:none; flex:1;" id="panel-tab-history"
+            onclick="switchTab('history')" style="cursor:pointer;">Move History</div>
+          <div class="panel-section-title" style="margin-bottom:0; border:none; cursor:pointer; display:none;" id="panel-tab-chat"
+            onclick="switchTab('chat')">
+            💬 Chat<span class="chat-unread" id="chat-unread">0</span>
+          </div>
+        </div>
         <div id="move-history"></div>
+        <!-- Chat box - online only -->
+        <div id="chat-section">
+          <div class="chat-messages" id="chat-messages">
+            <div class="chat-bubble system"><span class="chat-text">Chat with your opponent</span></div>
+          </div>
+          <div class="chat-input-row">
+            <input id="chat-input" type="text" maxlength="120" placeholder="Type a message..."
+              onkeydown="if(event.key==='Enter') sendChat()" />
+            <button class="chat-mic-btn" id="chat-mic-btn" onclick="toggleVoiceMsg()" title="Hold to record voice message">🎤</button>
+            <button class="chat-send-btn" onclick="sendChat()">➤</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1161,7 +1292,8 @@ function showScreen(id){
 function buildBoard(){
   const bd=document.getElementById('board');
   bd.innerHTML='';
-  const flipped=gameMode==='ai'?playerColor==='b':false;
+  // Flip board when playing as black (AI mode or online mode)
+  const flipped = playerColor === 'b';
   for(let r=0;r<8;r++) for(let f=0;f<8;f++){
     const vr=flipped?7-r:r, vf=flipped?7-f:f;
     const sq=document.createElement('div');
@@ -1219,6 +1351,11 @@ function updatePlayerBars(){
 }
 
 function updateStatus(){
+  // Show waiting message if online opponent not connected yet
+  if(gameMode==='online' && document.getElementById('conn-dot').className!=='dot connected'){
+    document.getElementById('status-bar').textContent='⏳ Waiting for opponent to join...';
+    return;
+  }
   const lm=getLegalMoves(G.board,G.turn,G.castling,G.enPassant);
   const inC=isInCheck(G.board,G.turn);
   // Resolve display name for current and opponent turn
@@ -1259,9 +1396,18 @@ function updateMoveHistory(){
 }
 
 function handleClick(r,f){
-  if(G.gameOver) return;
+  if(G.gameOver){
+    // Special case: host waiting for opponent — show friendly message
+    if(gameMode==='online' && myOnlineColor==='w' &&
+       document.getElementById('conn-status').textContent.includes('Waiting')){
+      document.getElementById('status-bar').textContent='Waiting for opponent to join...';
+    }
+    return;
+  }
   if(gameMode==='ai'&&G.turn!==playerColor) return;
   if(gameMode==='online'&&G.turn!==myOnlineColor) return;
+  // Block all moves until opponent is connected (dot is green)
+  if(gameMode==='online'&&document.getElementById('conn-dot').className!=='dot connected') return;
 
   const p=G.board[r][f];
 
@@ -1338,6 +1484,11 @@ function doMove(move){
   lastMove=move;
   selected=null; legalMovesForSel=[];
   G.posHistory.push(boardKey());
+  // Hide swap button once game starts
+  if(gameMode==='online' && G.history.length===1){
+    document.getElementById('swap-btn').style.display='none';
+    document.getElementById('swap-msg').textContent='';
+  }
   renderBoard();
 
   if(gameMode==='ai'&&!G.gameOver&&G.turn!==playerColor){
@@ -1470,7 +1621,7 @@ function confirmLocalStart(){
 // Free Firebase RTDB — works through all firewalls, no P2P needed
 // DATABASE SETUP: Go to console.firebase.google.com → create free project →
 // Realtime Database → create database → Rules: set read/write to true → copy URL below
-const FB_URL = 'https://harish-rahav-default-rtdb.asia-southeast1.firebasedatabase.app';
+const FB_URL = 'https://hrchesspublic-default-rtdb.asia-southeast1.firebasedatabase.app';
 let onlineRoom = null, myOnlineColor = 'w';
 let fbPollInterval = null, fbLastMsgIndex = -1, fbRoomRef = null;
 
@@ -1499,40 +1650,66 @@ async function fbDelete(path){
 
 function cleanupOnline(){
   if(fbPollInterval){ clearInterval(fbPollInterval); fbPollInterval=null; }
-  if(onlineRoom){
-    // Don't delete room — let it expire naturally (Firebase rules can handle TTL)
-    onlineRoom=null;
-  }
+  if(onlineRoom){ onlineRoom=null; }
+  cleanupVoice();
+  clearChat();
+}
+
+let onlineHostColor = 'w'; // host's chosen color: 'w', 'b', or 'r' (random)
+
+function showCreateRoom(){
+  document.getElementById('create-room-row').style.display='block';
+  document.getElementById('join-row').style.display='none';
+  // Reset to default selection
+  onlineHostColor='w';
+  document.querySelectorAll('#create-room-row .color-btn').forEach(b=>b.classList.remove('sel'));
+  document.getElementById('online-white-btn').classList.add('sel');
+}
+
+function selOnlineColor(c, el){
+  onlineHostColor = c;
+  document.querySelectorAll('#create-room-row .color-btn').forEach(b=>b.classList.remove('sel'));
+  el.classList.add('sel');
 }
 
 function showJoinRoom(){
   document.getElementById('join-row').style.display='flex';
+  document.getElementById('create-room-row').style.display='none';
 }
 
 async function createRoom(){
   cleanupOnline();
+  // Resolve random color
+  const hostColor = onlineHostColor==='r' ? (Math.random()<0.5?'w':'b') : onlineHostColor;
+  const guestColor = hostColor==='w' ? 'b' : 'w';
   const code = Math.random().toString(36).substr(2,6).toUpperCase();
   setMsg('Creating room...');
   try {
     await fbWrite('/rooms/'+code, {
       created: Date.now(),
       host: playerName,
+      hostColor: hostColor,
+      guestColor: guestColor,
       status: 'waiting',
       messages: null
     });
     onlineRoom = code;
-    myOnlineColor = 'w';
-    setMsg('✅ Room ready! Share code: '+code);
+    myOnlineColor = hostColor;
+    setMsg('✅ Room ready! Share code: '+code+' — You play '+(hostColor==='w'?'White ♔':'Black ♚'));
+    // Go to game screen
+    startOnlineGame();
     // Poll for joiner
     fbPollInterval = setInterval(async ()=>{
-      const room = await fbRead('/rooms/'+code);
-      if(!room){ setMsg('❌ Room lost. Try again.'); cleanupOnline(); return; }
-      if(room.status === 'joined'){
-        clearInterval(fbPollInterval); fbPollInterval=null;
-        fbLastMsgIndex = -1;
-        startOnlineGame();
-        startPollingMessages();
-      }
+      try {
+        const room = await fbRead('/rooms/'+code);
+        if(!room){ return; }
+        if(room.status === 'joined'){
+          clearInterval(fbPollInterval); fbPollInterval=null;
+          fbLastMsgIndex = -1;
+          markOpponentConnected(room.guest || 'Opponent');
+          startPollingMessages();
+        }
+      } catch(e){}
     }, 1500);
   } catch(e){
     setMsg('❌ Could not create room. Check your internet.');
@@ -1547,15 +1724,24 @@ async function joinRoom(){
   try {
     const room = await fbRead('/rooms/'+code);
     if(!room){ setMsg('❌ Room not found. Check the code.'); return; }
-    if(room.status !== 'waiting'){ setMsg('❌ Room already in use.'); return; }
-    // Mark as joined
+    if(room.status !== 'waiting'){ setMsg('❌ Room already in use. Ask host to create a new room.'); return; }
+    // Joiner gets the opposite color of host
+    const guestColor = room.guestColor || 'b';
+    // Mark as joined and save guest name
     await fbWrite('/rooms/'+code+'/status', 'joined');
     await fbWrite('/rooms/'+code+'/guest', playerName);
     onlineRoom = code;
-    myOnlineColor = 'b';
+    myOnlineColor = guestColor;
     fbLastMsgIndex = -1;
-    setMsg('✅ Joined! Starting game...');
+    const hostName = room.host || 'Opponent';
+    setMsg('✅ Joined! You play '+(guestColor==='w'?'White ♔':'Black ♚'));
     startOnlineGame();
+    // Show host's real name on their colour bar
+    if(guestColor==='b'){
+      document.getElementById('name-white').textContent = hostName; // host is white
+    } else {
+      document.getElementById('name-black').textContent = hostName; // host is black
+    }
     startPollingMessages();
   } catch(e){
     setMsg('❌ Connection error. Try again.');
@@ -1593,6 +1779,25 @@ function handleOnlineMessage(msg){
   } else if(msg.type==='disconnected'){
     document.getElementById('conn-status').textContent='Opponent disconnected';
     document.getElementById('conn-dot').className='dot';
+    appendSystemMessage('Opponent disconnected.');
+  } else if(msg.type==='swap-request'){
+    // Opponent wants to swap — ask this player
+    const swapMsg = document.getElementById('swap-msg');
+    swapMsg.textContent='Opponent wants to swap colors!';
+    document.getElementById('swap-btn').textContent='✅ Accept Swap';
+    document.getElementById('swap-btn').onclick = acceptSwap;
+    document.getElementById('swap-btn').style.display='block';
+  } else if(msg.type==='swap-accept'){
+    // Other player accepted — swap our color
+    applyColorSwap();
+    document.getElementById('swap-msg').textContent='Colors swapped!';
+    document.getElementById('swap-btn').style.display='none';
+    setTimeout(()=>{ document.getElementById('swap-msg').textContent=''; },3000);
+  } else if(msg.type==='swap-decline'){
+    document.getElementById('swap-msg').textContent='Swap declined.';
+    document.getElementById('swap-btn').textContent='🔄 Swap Colors';
+    document.getElementById('swap-btn').onclick = requestSwap;
+    setTimeout(()=>{ document.getElementById('swap-msg').textContent=''; },3000);
   }
 }
 
@@ -1607,22 +1812,123 @@ function sendOnlineMove(move){
   sendOnlineMessage({type:'move', move});
 }
 
+function requestSwap(){
+  if(historyStack.length === 0){
+    // Only allow swap before first move is made
+    sendOnlineMessage({type:'swap-request'});
+    document.getElementById('swap-msg').textContent='Swap requested... waiting for opponent.';
+    document.getElementById('swap-btn').style.display='none';
+  } else {
+    document.getElementById('swap-msg').textContent='Cannot swap after game has started.';
+    setTimeout(()=>{ document.getElementById('swap-msg').textContent=''; },2000);
+  }
+}
+
+function acceptSwap(){
+  sendOnlineMessage({type:'swap-accept'});
+  applyColorSwap();
+  document.getElementById('swap-msg').textContent='Colors swapped!';
+  document.getElementById('swap-btn').textContent='🔄 Swap Colors';
+  document.getElementById('swap-btn').onclick = requestSwap;
+  document.getElementById('swap-btn').style.display='block';
+  setTimeout(()=>{ document.getElementById('swap-msg').textContent=''; },3000);
+}
+
+function applyColorSwap(){
+  // Flip my color
+  myOnlineColor = myOnlineColor==='w' ? 'b' : 'w';
+  playerColor = myOnlineColor;
+  G.myColor = myOnlineColor;
+  G.gameOver = false; // ensure game is unblocked after swap
+  gameOverFired = false;
+  // Swap name bars
+  const wName = document.getElementById('name-white').textContent;
+  const bName = document.getElementById('name-black').textContent;
+  document.getElementById('name-white').textContent = bName;
+  document.getElementById('name-black').textContent = wName;
+  // Update color label
+  updateColorLabel();
+  // Update status bar - white always moves first
+  const whitePlayerName = document.getElementById('name-white').textContent;
+  document.getElementById('status-bar').textContent = whitePlayerName + ' to move';
+  // Rebuild board (flips orientation for the player)
+  buildBoard();
+}
+
+function updateColorLabel(){
+  const label = myOnlineColor==='w' ? 'You play White ♔' : 'You play Black ♚';
+  document.getElementById('my-color-label').textContent = label;
+}
+
 function startOnlineGame(){
   gameMode='online';
   playerColor=myOnlineColor;
   newGame();
   G.mode='online'; G.myColor=myOnlineColor;
-  document.getElementById('name-white').textContent = myOnlineColor==='w' ? playerName : 'Opponent';
-  document.getElementById('name-black').textContent = myOnlineColor==='b' ? playerName : 'Opponent';
-  document.getElementById('game-title').textContent='Online Game';
-  document.getElementById('online-side').style.display='block';
-  document.getElementById('room-code-display').textContent=onlineRoom;
-  document.getElementById('conn-dot').className='dot connected';
-  document.getElementById('conn-status').textContent='Opponent connected!';
-  document.getElementById('undo-btn').style.display='none';
+
+  // White bar = bottom, Black bar = top
+  if(myOnlineColor==='w'){
+    document.getElementById('name-white').textContent = playerName;
+    document.getElementById('name-black').textContent = 'Opponent';
+  } else {
+    document.getElementById('name-white').textContent = 'Opponent';
+    document.getElementById('name-black').textContent = playerName;
+  }
+
+  document.getElementById('game-title').textContent = 'Online Game';
+  document.getElementById('online-side').style.display = 'block';
+  document.getElementById('room-code-display').textContent = onlineRoom;
+  document.getElementById('undo-btn').style.display = 'none';
+  document.getElementById('swap-btn').style.display = 'none';
+  document.getElementById('swap-msg').textContent = '';
+  document.getElementById('swap-btn').textContent = '🔄 Swap Colors';
+  document.getElementById('swap-btn').onclick = requestSwap;
   historyStack=[]; lastMove=null; selected=null; legalMovesForSel=[];
+
+  // Show color label
+  updateColorLabel();
+
+  if(myOnlineColor === 'w'){
+    document.getElementById('conn-dot').className = 'dot waiting';
+    document.getElementById('conn-status').textContent = 'Waiting for opponent...';
+    G.gameOver = true; // block ALL moves until opponent joins - host goes first as white
+  } else {
+    // Joiner plays black - white (host) moves first, so joiner is also blocked initially
+    // but we DON'T set gameOver=true because that would confuse the state
+    document.getElementById('conn-dot').className = 'dot connected';
+    document.getElementById('conn-status').textContent = 'Connected! Waiting for host...';
+    // Show swap button for joiner immediately
+    document.getElementById('swap-btn').style.display = 'block';
+    // Enable voice for joiner right away
+    initVoice();
+  }
+
   showScreen('game-screen');
   buildBoard();
+  // Initialize chat for online mode
+  initChat();
+}
+
+function markOpponentConnected(opponentName){
+  G.gameOver = false;
+  gameOverFired = false;
+  document.getElementById('conn-dot').className = 'dot connected';
+  document.getElementById('conn-status').textContent = 'Opponent connected!';
+  document.getElementById('swap-btn').style.display = 'block';
+  if(opponentName){
+    if(myOnlineColor==='w'){
+      document.getElementById('name-black').textContent = opponentName;
+    } else {
+      document.getElementById('name-white').textContent = opponentName;
+    }
+  }
+  const whitePlayerName = document.getElementById('name-white').textContent;
+  document.getElementById('status-bar').textContent = whitePlayerName + ' to move';
+  // System chat message
+  appendSystemMessage((opponentName||'Opponent') + ' joined — game begins!');
+  // Enable voice chat now that both players are connected
+  initVoice();
+  renderBoard();
 }
 
 function copyCode(){
@@ -1631,6 +1937,510 @@ function copyCode(){
     btn.textContent='Copied!';
     setTimeout(()=>btn.textContent='Copy Code',1500);
   });
+}
+
+// ===================== CHAT =====================
+let chatPollInterval = null;
+let chatLastIndex = -1;
+let currentTab = 'history';
+let chatUnreadCount = 0;
+
+function initChat(){
+  chatLastIndex = -1;
+  chatUnreadCount = 0;
+  currentTab = 'history';
+  document.getElementById('chat-messages').innerHTML =
+    '<div class="chat-bubble system"><span class="chat-text">Chat with your opponent</span></div>';
+  document.getElementById('chat-input').value = '';
+  document.getElementById('chat-unread').textContent = '0';
+  document.getElementById('chat-unread').classList.remove('show');
+  // Show chat tab only in online mode
+  document.getElementById('panel-tab-chat').style.display = 'inline-flex';
+  document.getElementById('panel-tab-history').style.cursor = 'pointer';
+  // Start on history tab
+  switchTab('history');
+  startChatPolling();
+}
+
+function clearChat(){
+  chatLastIndex = -1;
+  chatUnreadCount = 0;
+  if(chatPollInterval){ clearInterval(chatPollInterval); chatPollInterval=null; }
+  // Stop any ongoing recording
+  if(vmRecording){ stopVoiceMsg(); }
+  clearInterval(vmTimerInterval);
+  document.getElementById('panel-tab-chat').style.display = 'none';
+  switchTab('history');
+}
+
+function switchTab(tab){
+  currentTab = tab;
+  const histEl = document.getElementById('move-history');
+  const chatEl = document.getElementById('chat-section');
+  const tabHist = document.getElementById('panel-tab-history');
+  const tabChat = document.getElementById('panel-tab-chat');
+
+  if(tab === 'history'){
+    histEl.style.display = 'block';
+    chatEl.classList.remove('visible');
+    tabHist.style.borderBottom = '2px solid var(--accent)';
+    tabHist.style.color = 'var(--accent)';
+    tabChat.style.borderBottom = 'none';
+    tabChat.style.color = 'var(--text-muted)';
+  } else {
+    histEl.style.display = 'none';
+    chatEl.classList.add('visible');
+    tabChat.style.borderBottom = '2px solid var(--accent)';
+    tabChat.style.color = 'var(--accent)';
+    tabHist.style.borderBottom = 'none';
+    tabHist.style.color = 'var(--text-muted)';
+    // Clear unread badge when chat tab is opened
+    chatUnreadCount = 0;
+    document.getElementById('chat-unread').textContent = '0';
+    document.getElementById('chat-unread').classList.remove('show');
+    // Scroll to bottom
+    const cm = document.getElementById('chat-messages');
+    cm.scrollTop = cm.scrollHeight;
+  }
+}
+
+async function sendChat(){
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if(!text || !onlineRoom) return;
+  input.value = '';
+  // Add to UI immediately (optimistic)
+  appendChatBubble(playerName, text, true);
+  // Send to Firebase
+  try {
+    await fbPush('/rooms/'+onlineRoom+'/chat', {
+      from: myOnlineColor,
+      name: playerName,
+      text: text,
+      ts: Date.now()
+    });
+  } catch(e){
+    appendSystemMessage('Failed to send message.');
+  }
+}
+
+function appendChatBubble(name, text, isMe){
+  const cm = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.className = 'chat-bubble ' + (isMe ? 'me' : 'them');
+  div.innerHTML = `<div class="chat-who">${isMe?'You':name}</div><div class="chat-text">${escapeHtml(text)}</div>`;
+  cm.appendChild(div);
+  cm.scrollTop = cm.scrollHeight;
+}
+
+function appendSystemMessage(text){
+  const cm = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.className = 'chat-bubble system';
+  div.innerHTML = `<span class="chat-text">${escapeHtml(text)}</span>`;
+  cm.appendChild(div);
+  cm.scrollTop = cm.scrollHeight;
+}
+
+function escapeHtml(str){
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function startChatPolling(){
+  if(chatPollInterval) clearInterval(chatPollInterval);
+  chatPollInterval = setInterval(async ()=>{
+    if(!onlineRoom) return;
+    try {
+      const chats = await fbRead('/rooms/'+onlineRoom+'/chat');
+      if(!chats) return;
+      const keys = Object.keys(chats).sort();
+      for(let i = chatLastIndex+1; i < keys.length; i++){
+        const msg = chats[keys[i]];
+        if(msg.from !== myOnlineColor){
+          // Message from opponent
+          if(msg.voiceData){
+            // Voice message
+            appendVoiceBubble(msg.name||'Opponent', msg.voiceData, msg.duration||0, false);
+          } else {
+            appendChatBubble(msg.name || 'Opponent', msg.text, false);
+          }
+          // Show unread badge if not on chat tab
+          if(currentTab !== 'chat'){
+            chatUnreadCount++;
+            const badge = document.getElementById('chat-unread');
+            badge.textContent = chatUnreadCount;
+            badge.classList.add('show');
+          }
+        }
+        chatLastIndex = i;
+      }
+    } catch(e){}
+  }, 1000);
+}
+
+// ===================== VOICE MESSAGES IN CHAT =====================
+let vmRecorder = null;
+let vmChunks = [];
+let vmRecording = false;
+let vmStartTime = 0;
+let vmTimerInterval = null;
+
+async function toggleVoiceMsg(){
+  if(vmRecording){
+    stopVoiceMsg();
+  } else {
+    await startVoiceMsg();
+  }
+}
+
+async function startVoiceMsg(){
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true, video:false});
+    vmChunks = [];
+    vmRecorder = new MediaRecorder(stream, {mimeType: getSupportedMimeType()});
+    vmRecorder.ondataavailable = e => { if(e.data.size>0) vmChunks.push(e.data); };
+    vmRecorder.onstop = async () => {
+      stream.getTracks().forEach(t=>t.stop());
+      await processVoiceMsg();
+    };
+    vmRecorder.start();
+    vmRecording = true;
+    vmStartTime = Date.now();
+    const btn = document.getElementById('chat-mic-btn');
+    btn.classList.add('recording');
+    btn.textContent = '⏹';
+    // Update placeholder to show recording time
+    const input = document.getElementById('chat-input');
+    input.placeholder = 'Recording... 0s (tap ⏹ to send)';
+    input.disabled = true;
+    vmTimerInterval = setInterval(()=>{
+      const s = Math.floor((Date.now()-vmStartTime)/1000);
+      input.placeholder = `Recording... ${s}s (tap ⏹ to send)`;
+      if(s >= 60) stopVoiceMsg(); // max 60 seconds
+    }, 1000);
+  } catch(e){
+    appendSystemMessage('❌ Microphone access denied.');
+  }
+}
+
+function stopVoiceMsg(){
+  if(!vmRecording || !vmRecorder) return;
+  clearInterval(vmTimerInterval);
+  vmRecorder.stop();
+  vmRecording = false;
+  const btn = document.getElementById('chat-mic-btn');
+  btn.classList.remove('recording');
+  btn.textContent = '🎤';
+  const input = document.getElementById('chat-input');
+  input.placeholder = 'Type a message...';
+  input.disabled = false;
+}
+
+function getSupportedMimeType(){
+  const types = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4'];
+  for(const t of types){ if(MediaRecorder.isTypeSupported(t)) return t; }
+  return '';
+}
+
+async function processVoiceMsg(){
+  const blob = new Blob(vmChunks, {type: vmChunks[0]?.type||'audio/webm'});
+  const duration = Math.round((Date.now()-vmStartTime)/1000);
+  if(duration < 1){ appendSystemMessage('Recording too short.'); return; }
+
+  // Convert to base64 to send via Firebase
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const base64 = reader.result; // data:audio/webm;base64,...
+    // Show in own chat immediately
+    appendVoiceBubble(playerName, base64, duration, true);
+    // Send via Firebase (split if needed — Firebase has 10MB node limit, voice msgs are small)
+    try {
+      await fbPush('/rooms/'+onlineRoom+'/chat', {
+        from: myOnlineColor,
+        name: playerName,
+        voiceData: base64,
+        duration: duration,
+        ts: Date.now()
+      });
+    } catch(e){
+      appendSystemMessage('❌ Failed to send voice message.');
+    }
+  };
+  reader.readAsDataURL(blob);
+}
+
+function appendVoiceBubble(name, audioData, duration, isMe){
+  const cm = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.className = 'chat-bubble ' + (isMe ? 'me' : 'them');
+
+  // Generate random bar heights for visual effect
+  const bars = Array.from({length:12}, ()=>{
+    const h = Math.floor(Math.random()*12)+4;
+    return `<span style="height:${h}px"></span>`;
+  }).join('');
+
+  const audioId = 'vm_'+Date.now()+'_'+Math.random().toString(36).substr(2,4);
+
+  div.innerHTML = `
+    <div class="chat-who">${isMe?'You':escapeHtml(name)}</div>
+    <div class="chat-text">
+      <div class="voice-msg-bubble" onclick="playVoiceMsg('${audioId}', this)">
+        <span class="play-btn">▶️</span>
+        <div class="voice-bar-viz">${bars}</div>
+        <span class="voice-duration">${duration}s</span>
+      </div>
+      <audio id="${audioId}" src="${audioData}" preload="auto" style="display:none"></audio>
+    </div>`;
+  cm.appendChild(div);
+  cm.scrollTop = cm.scrollHeight;
+}
+
+function playVoiceMsg(audioId, bubble){
+  const audio = document.getElementById(audioId);
+  if(!audio) return;
+  if(!audio.paused){
+    audio.pause();
+    audio.currentTime = 0;
+    bubble.querySelector('.play-btn').textContent = '▶️';
+    return;
+  }
+  // Stop any other playing voice messages
+  document.querySelectorAll('.chat-messages audio').forEach(a=>{
+    if(a.id !== audioId){ a.pause(); a.currentTime=0; }
+  });
+  document.querySelectorAll('.play-btn').forEach(b=>b.textContent='▶️');
+  audio.play();
+  bubble.querySelector('.play-btn').textContent = '⏸️';
+  audio.onended = ()=>{ bubble.querySelector('.play-btn').textContent = '▶️'; };
+}
+
+// ===================== VOICE CHAT (WebRTC + Firebase signaling) =====================
+let voicePeer = null;        // RTCPeerConnection
+let localStream = null;      // my microphone stream
+let remoteAudio = null;      // <audio> element for opponent
+let voiceActive = false;     // call is live
+let voiceMuted = false;      // mic muted
+let voicePolling = null;     // interval to check Firebase signaling
+let voiceSignalIndex = -1;   // last processed signal index
+let isCaller = false;        // did I initiate the call
+
+const ICE_SERVERS = {
+  iceServers:[
+    {urls:'stun:stun.l.google.com:19302'},
+    {urls:'stun:stun1.l.google.com:19302'},
+    {urls:'stun:stun2.l.google.com:19302'}
+  ]
+};
+
+function initVoice(){
+  document.getElementById('voice-bar').classList.add('visible');
+  setVoiceStatus('🎤 Voice chat available', false);
+  document.getElementById('voice-btn').textContent = '📞 Call';
+  document.getElementById('voice-btn').className = 'voice-btn';
+  voiceSignalIndex = -1;
+  startVoiceSignalPolling();
+}
+
+function cleanupVoice(){
+  stopVoice();
+  if(voicePolling){ clearInterval(voicePolling); voicePolling=null; }
+  document.getElementById('voice-bar').classList.remove('visible');
+}
+
+function setVoiceStatus(txt, active, calling){
+  const s = document.getElementById('voice-status');
+  s.innerHTML = active ? `<span class="voice-indicator"></span>${txt}` : txt;
+  s.className = 'voice-status' + (active?' active':calling?' calling':'');
+}
+
+async function toggleVoice(){
+  if(voiceActive){
+    // Active call — end it
+    sendVoiceSignal({type:'hangup'});
+    stopVoice();
+    appendSystemMessage('Voice call ended.');
+  } else if(voicePeer && !voiceActive){
+    // Outgoing call pending — cancel it
+    sendVoiceSignal({type:'hangup'});
+    stopVoice();
+    appendSystemMessage('Call cancelled.');
+  } else {
+    // No call — start one
+    await startCall();
+  }
+}
+
+async function toggleMute(){
+  if(!localStream) return;
+  voiceMuted = !voiceMuted;
+  localStream.getAudioTracks().forEach(t => t.enabled = !voiceMuted);
+  const muteBtn = document.getElementById('mute-btn');
+  if(voiceMuted){
+    muteBtn.textContent = '🔈';
+    muteBtn.className = 'voice-btn muted';
+    muteBtn.title = 'Unmute';
+    setVoiceStatus('🔇 Muted', false, false);
+  } else {
+    muteBtn.textContent = '🔇';
+    muteBtn.className = 'voice-btn';
+    muteBtn.title = 'Mute';
+    setVoiceStatus('🎤 Connected', true, false);
+  }
+}
+
+async function startCall(){
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({audio:true, video:false});
+  } catch(e){
+    appendSystemMessage('❌ Microphone access denied.');
+    return;
+  }
+  isCaller = true;
+  voicePeer = new RTCPeerConnection(ICE_SERVERS);
+  localStream.getTracks().forEach(t => voicePeer.addTrack(t, localStream));
+
+  voicePeer.onicecandidate = e => {
+    if(e.candidate) sendVoiceSignal({type:'ice', candidate: e.candidate});
+  };
+  voicePeer.ontrack = e => {
+    playRemoteAudio(e.streams[0]);
+  };
+  voicePeer.onconnectionstatechange = () => {
+    if(voicePeer.connectionState === 'connected'){
+      voiceActive = true;
+      voiceMuted = false;
+      setVoiceStatus('🎤 Connected', true);
+      document.getElementById('voice-btn').textContent = '📵 End';
+      document.getElementById('voice-btn').className = 'voice-btn active';
+      document.getElementById('mute-btn').style.display = 'block';
+      document.getElementById('mute-btn').textContent = '🔇';
+      document.getElementById('mute-btn').className = 'voice-btn';
+      appendSystemMessage('Voice call connected!');
+    } else if(['disconnected','failed','closed'].includes(voicePeer.connectionState)){
+      stopVoice();
+    }
+  };
+
+  const offer = await voicePeer.createOffer();
+  await voicePeer.setLocalDescription(offer);
+  sendVoiceSignal({type:'offer', sdp: offer});
+
+  setVoiceStatus('📞 Calling...', false, true);
+  document.getElementById('voice-btn').textContent = '📵 Cancel';
+  appendSystemMessage('Voice call started — waiting for opponent...');
+}
+
+async function handleVoiceSignal(sig){
+  if(sig.type === 'offer'){
+    // Receive call
+    const accept = confirm('📞 '+( sig.callerName||'Opponent')+' is calling. Accept voice chat?');
+    if(!accept){
+      sendVoiceSignal({type:'hangup'});
+      appendSystemMessage('Voice call declined.');
+      return;
+    }
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({audio:true, video:false});
+    } catch(e){
+      appendSystemMessage('❌ Microphone access denied.');
+      return;
+    }
+    isCaller = false;
+    voicePeer = new RTCPeerConnection(ICE_SERVERS);
+    localStream.getTracks().forEach(t => voicePeer.addTrack(t, localStream));
+
+    voicePeer.onicecandidate = e => {
+      if(e.candidate) sendVoiceSignal({type:'ice', candidate: e.candidate});
+    };
+    voicePeer.ontrack = e => {
+      playRemoteAudio(e.streams[0]);
+    };
+    voicePeer.onconnectionstatechange = () => {
+      if(voicePeer.connectionState === 'connected'){
+        voiceActive = true;
+        voiceMuted = false;
+        setVoiceStatus('🎤 Connected', true);
+        document.getElementById('voice-btn').textContent = '📵 End';
+        document.getElementById('voice-btn').className = 'voice-btn active';
+        document.getElementById('mute-btn').style.display = 'block';
+        document.getElementById('mute-btn').textContent = '🔇';
+        document.getElementById('mute-btn').className = 'voice-btn';
+        appendSystemMessage('Voice call connected!');
+      } else if(['disconnected','failed','closed'].includes(voicePeer.connectionState)){
+        stopVoice();
+      }
+    };
+
+    await voicePeer.setRemoteDescription(new RTCSessionDescription(sig.sdp));
+    const answer = await voicePeer.createAnswer();
+    await voicePeer.setLocalDescription(answer);
+    sendVoiceSignal({type:'answer', sdp: answer});
+    setVoiceStatus('📞 Connecting...', false, true);
+    document.getElementById('voice-btn').textContent = '📵 Cancel';
+
+  } else if(sig.type === 'answer' && voicePeer){
+    await voicePeer.setRemoteDescription(new RTCSessionDescription(sig.sdp));
+
+  } else if(sig.type === 'ice' && voicePeer){
+    try { await voicePeer.addIceCandidate(new RTCIceCandidate(sig.candidate)); } catch(e){}
+
+  } else if(sig.type === 'hangup'){
+    appendSystemMessage('Opponent ended the voice call.');
+    stopVoice();
+  }
+}
+
+function playRemoteAudio(stream){
+  if(!remoteAudio){
+    remoteAudio = document.createElement('audio');
+    remoteAudio.autoplay = true;
+    remoteAudio.style.display = 'none';
+    document.body.appendChild(remoteAudio);
+  }
+  remoteAudio.srcObject = stream;
+}
+
+function stopVoice(){
+  if(localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream=null; }
+  if(voicePeer){ try{voicePeer.close();}catch(e){} voicePeer=null; }
+  if(remoteAudio){ remoteAudio.srcObject=null; }
+  voiceActive = false;
+  voiceMuted = false;
+  isCaller = false;
+  setVoiceStatus('🎤 Voice chat available', false);
+  document.getElementById('voice-btn').textContent = '📞 Call';
+  document.getElementById('voice-btn').className = 'voice-btn';
+  document.getElementById('mute-btn').style.display = 'none';
+}
+
+async function sendVoiceSignal(sig){
+  if(!onlineRoom) return;
+  try {
+    await fbPush('/rooms/'+onlineRoom+'/voice', {
+      ...sig, from: myOnlineColor,
+      callerName: playerName, ts: Date.now()
+    });
+  } catch(e){}
+}
+
+function startVoiceSignalPolling(){
+  if(voicePolling) clearInterval(voicePolling);
+  voicePolling = setInterval(async ()=>{
+    if(!onlineRoom) return;
+    try {
+      const sigs = await fbRead('/rooms/'+onlineRoom+'/voice');
+      if(!sigs) return;
+      const keys = Object.keys(sigs).sort();
+      for(let i = voiceSignalIndex+1; i < keys.length; i++){
+        const sig = sigs[keys[i]];
+        if(sig.from !== myOnlineColor){
+          await handleVoiceSignal(sig);
+        }
+        voiceSignalIndex = i;
+      }
+    } catch(e){}
+  }, 600);
 }
 
 // ===================== GAME ACTIONS =====================
@@ -1697,6 +2507,8 @@ function backToMenu(){
   document.getElementById('local-names-modal').classList.remove('open');
   document.getElementById('ai-options').classList.remove('open');
   document.getElementById('online-options').classList.remove('open');
+  document.getElementById('create-room-row').style.display='none';
+  document.getElementById('join-row').style.display='none';
   // Clear card highlights
   document.querySelectorAll('.menu-card').forEach(c=>c.classList.remove('active-card'));
   // Reset state
