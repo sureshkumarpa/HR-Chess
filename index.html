@@ -1233,14 +1233,17 @@ function getLegalMoves(board,c,castling,enPassant){
     if(color(board[r][f])===c){
       for(const m of getRawMoves(board,r,f,castling,enPassant)){
         if(m.castle){
-          const row=c==='w'?7:0;
-          const dir=m.castle==='K'?1:-1;
-          let safe=true;
-          for(let s=0;s<=2;s++){
-            const tb=board.map(r=>[...r]);
-            tb[row][4+s*dir]=null;
-            if(s>0)tb[row][4+s*dir]=c+'K';
-            if(isInCheck(tb,c)){safe=false;break;}
+          // King must not be in check currently, and must not pass through or land on attacked square
+          const row = c==='w' ? 7 : 0;
+          const dir = m.castle==='K' ? 1 : -1;
+          // Squares the king travels through: 4 → 5 → 6 (kingside) or 4 → 3 → 2 (queenside)
+          let safe = !isInCheck(board, c); // king not currently in check
+          for(let step=1; step<=2 && safe; step++){
+            const testCol = 4 + step*dir;
+            const tb = board.map(r=>[...r]);
+            tb[row][4] = null;          // remove king from origin
+            tb[row][testCol] = c+'K';   // place king on passing/destination square
+            if(isInCheck(tb, c)) safe = false;
           }
           if(safe) moves.push(m);
         } else {
@@ -1360,7 +1363,11 @@ function getBestMove(depth){
   let bestMove=moves[0],bestVal=c==='w'?-Infinity:Infinity;
   for(const m of moves){
     const {board:nb,enPassant:nep,castling:nc}=applyMove(G.board,m,G.enPassant,G.castling);
-    const val=minimax(nb,depth-1,-Infinity,Infinity,c!=='w',nc,nep);
+    let val=minimax(nb,depth-1,-Infinity,Infinity,c!=='w',nc,nep);
+    // Penalise moves that repeat an already-seen position (avoid draw loops)
+    const posKey=nb.map(r=>r.map(p=>p||'.').join('')).join('|')+(c==='w'?'b':'w');
+    const repCount=G.posHistory.filter(k=>k===posKey).length;
+    if(repCount>=2) val += c==='w'?-200:200; // strongly discourage 3-fold
     if(c==='w'?val>bestVal:val<bestVal){bestVal=val;bestMove=m;}
   }
   return bestMove;
@@ -1534,6 +1541,19 @@ function updateStatus(){
   }
   const lm=getLegalMoves(G.board,G.turn,G.castling,G.enPassant);
   const inC=isInCheck(G.board,G.turn);
+
+  // ---- Threefold repetition check ----
+  const curKey = boardKey();
+  const repCount = G.posHistory.filter(k=>k===curKey).length;
+  if(repCount >= 3){
+    G.gameOver = true;
+    setTimeout(()=>showGameOver('Draw','Threefold repetition'),300);
+    document.getElementById('status-bar').textContent='Draw by threefold repetition!';
+    return;
+  }
+
+  // ---- 50-move rule ----
+  // (optional but good practice — skip for now, already handled by repetition)
   // Resolve display name for current and opponent turn
   const curName  = G.turn==='w' ? document.getElementById('name-white').textContent : document.getElementById('name-black').textContent;
   const oppTurn  = opp(G.turn);
