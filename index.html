@@ -1150,7 +1150,6 @@ function getBestMove(depth){
 let selected=null, legalMovesForSel=[], lastMove=null;
 let pendingPromo=null;
 let aiDiff=1, playerColor='w', gameMode='local';
-let onlinePeer=null, onlineRoom=null, myOnlineColor='w';
 let historyStack=[];
 let localP1Name='Player 1', localP2Name='Player 2';
 
@@ -1467,125 +1466,145 @@ function confirmLocalStart(){
   buildBoard();
 }
 
-// ===================== ONLINE (peer-to-peer via BroadcastChannel/localStorage for demo, real P2P via PeerJS) =====================
-let peerConn=null, peerInstance=null;
+// ===================== ONLINE via Firebase Realtime Database =====================
+// Free Firebase RTDB — works through all firewalls, no P2P needed
+// DATABASE SETUP: Go to console.firebase.google.com → create free project →
+// Realtime Database → create database → Rules: set read/write to true → copy URL below
+const FB_URL = 'https://harish-rahav-default-rtdb.asia-southeast1.firebasedatabase.app';
+let onlineRoom = null, myOnlineColor = 'w';
+let fbPollInterval = null, fbLastMsgIndex = -1, fbRoomRef = null;
 
-function loadPeerJS(cb){
-  if(window.Peer){cb();return;}
-  const s=document.createElement('script');
-  s.src='https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js';
-  s.onload=cb;
-  document.head.appendChild(s);
+function setMsg(txt){ document.getElementById('online-msg').textContent = txt; }
+
+async function fbWrite(path, data){
+  await fetch(FB_URL+path+'.json', {
+    method:'PUT', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(data)
+  });
+}
+async function fbRead(path){
+  const r = await fetch(FB_URL+path+'.json');
+  return r.ok ? r.json() : null;
+}
+async function fbPush(path, data){
+  const r = await fetch(FB_URL+path+'.json', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(data)
+  });
+  return r.ok ? r.json() : null;
+}
+async function fbDelete(path){
+  await fetch(FB_URL+path+'.json', {method:'DELETE'});
 }
 
-function createRoom(){
-  // Clean up any existing connection first
-  if(peerInstance){try{peerInstance.destroy();}catch(e){} peerInstance=null; peerConn=null;}
-  const code=Math.random().toString(36).substr(2,6).toUpperCase();
-  document.getElementById('online-msg').textContent='Creating room '+code+'...';
-  loadPeerJS(()=>{
-    peerInstance=new Peer('chess-hr-'+code, {
-      config: {
-        iceServers:[
-          {urls:'stun:stun.l.google.com:19302'},
-          {urls:'stun:stun1.l.google.com:19302'},
-          {urls:'stun:stun2.l.google.com:19302'},
-          {urls:'stun:global.stun.twilio.com:3478'}
-        ]
-      }
-    });
-    peerInstance.on('open', id=>{
-      onlineRoom=code;
-      myOnlineColor='w';
-      document.getElementById('online-msg').textContent='✅ Room ready! Share code: '+code;
-      peerInstance.on('connection', conn=>{
-        peerConn=conn;
-        setupPeerConn();
-        startOnlineGame();
-      });
-    });
-    peerInstance.on('error', err=>{
-      document.getElementById('online-msg').textContent='❌ Error: '+err.type+'. Try again.';
-      peerInstance=null;
-    });
-  });
+function cleanupOnline(){
+  if(fbPollInterval){ clearInterval(fbPollInterval); fbPollInterval=null; }
+  if(onlineRoom){
+    // Don't delete room — let it expire naturally (Firebase rules can handle TTL)
+    onlineRoom=null;
+  }
 }
 
 function showJoinRoom(){
   document.getElementById('join-row').style.display='flex';
 }
 
-function joinRoom(){
-  const code=document.getElementById('join-code').value.trim().toUpperCase();
-  if(code.length<4){
-    document.getElementById('online-msg').textContent='Please enter a valid room code.';
-    return;
-  }
-  if(peerInstance){try{peerInstance.destroy();}catch(e){} peerInstance=null; peerConn=null;}
-  document.getElementById('online-msg').textContent='Connecting to room '+code+'...';
-  loadPeerJS(()=>{
-    peerInstance=new Peer({
-      config: {
-        iceServers:[
-          {urls:'stun:stun.l.google.com:19302'},
-          {urls:'stun:stun1.l.google.com:19302'},
-          {urls:'stun:stun2.l.google.com:19302'},
-          {urls:'stun:global.stun.twilio.com:3478'}
-        ]
+async function createRoom(){
+  cleanupOnline();
+  const code = Math.random().toString(36).substr(2,6).toUpperCase();
+  setMsg('Creating room...');
+  try {
+    await fbWrite('/rooms/'+code, {
+      created: Date.now(),
+      host: playerName,
+      status: 'waiting',
+      messages: null
+    });
+    onlineRoom = code;
+    myOnlineColor = 'w';
+    setMsg('✅ Room ready! Share code: '+code);
+    // Poll for joiner
+    fbPollInterval = setInterval(async ()=>{
+      const room = await fbRead('/rooms/'+code);
+      if(!room){ setMsg('❌ Room lost. Try again.'); cleanupOnline(); return; }
+      if(room.status === 'joined'){
+        clearInterval(fbPollInterval); fbPollInterval=null;
+        fbLastMsgIndex = -1;
+        startOnlineGame();
+        startPollingMessages();
       }
-    });
-    peerInstance.on('open', ()=>{
-      document.getElementById('online-msg').textContent='Connecting to room '+code+'...';
-      const conn=peerInstance.connect('chess-hr-'+code, {reliable:true});
-      peerConn=conn;
-      let connected=false;
-      conn.on('open', ()=>{
-        connected=true;
-        onlineRoom=code;
-        myOnlineColor='b';
-        setupPeerConn();
-        conn.send(JSON.stringify({type:'joined'}));
-        document.getElementById('online-msg').textContent='✅ Connected! Game starting...';
-      });
-      conn.on('error', err=>{
-        document.getElementById('online-msg').textContent='❌ Could not connect. Check the room code.';
-      });
-      // Timeout if no connection after 10s
-      setTimeout(()=>{
-        if(!connected){
-          document.getElementById('online-msg').textContent='❌ Timed out. Check code or ask host to recreate room.';
-          try{peerInstance.destroy();}catch(e){}
-          peerInstance=null; peerConn=null;
-        }
-      }, 10000);
-    });
-    peerInstance.on('error', err=>{
-      document.getElementById('online-msg').textContent='❌ Error: '+err.type+'. Try again.';
-      peerInstance=null;
-    });
-  });
+    }, 1500);
+  } catch(e){
+    setMsg('❌ Could not create room. Check your internet.');
+  }
 }
 
-function setupPeerConn(){
-  peerConn.on('data',data=>{
-    const msg=JSON.parse(data);
-    if(msg.type==='joined'){startOnlineGame();}
-    else if(msg.type==='move'){
-      const m=msg.move;
-      executeMove(m,m.to[0],m.to[1],true);
+async function joinRoom(){
+  const code = document.getElementById('join-code').value.trim().toUpperCase();
+  if(code.length < 4){ setMsg('Please enter a valid room code.'); return; }
+  cleanupOnline();
+  setMsg('Looking for room '+code+'...');
+  try {
+    const room = await fbRead('/rooms/'+code);
+    if(!room){ setMsg('❌ Room not found. Check the code.'); return; }
+    if(room.status !== 'waiting'){ setMsg('❌ Room already in use.'); return; }
+    // Mark as joined
+    await fbWrite('/rooms/'+code+'/status', 'joined');
+    await fbWrite('/rooms/'+code+'/guest', playerName);
+    onlineRoom = code;
+    myOnlineColor = 'b';
+    fbLastMsgIndex = -1;
+    setMsg('✅ Joined! Starting game...');
+    startOnlineGame();
+    startPollingMessages();
+  } catch(e){
+    setMsg('❌ Connection error. Try again.');
+  }
+}
+
+function startPollingMessages(){
+  fbPollInterval = setInterval(async ()=>{
+    if(!onlineRoom) return;
+    try {
+      const msgs = await fbRead('/rooms/'+onlineRoom+'/messages');
+      if(!msgs) return;
+      const keys = Object.keys(msgs).sort();
+      for(let i = fbLastMsgIndex+1; i < keys.length; i++){
+        const msg = msgs[keys[i]];
+        if(msg.from === myOnlineColor) continue; // skip own messages
+        handleOnlineMessage(msg);
+        fbLastMsgIndex = i;
+      }
+    } catch(e){}
+  }, 800);
+}
+
+function handleOnlineMessage(msg){
+  if(msg.type==='move'){
+    executeMove(msg.move, msg.move.to[0], msg.move.to[1], true);
+  } else if(msg.type==='draw-offer'){
+    if(confirm('Opponent offers a draw. Accept?')){
+      endDraw();
+      sendOnlineMessage({type:'draw-accept'});
     }
-    else if(msg.type==='draw-offer'){if(confirm('Opponent offers a draw. Accept?')){endDraw();peerConn.send(JSON.stringify({type:'draw-accept'}));}}
-    else if(msg.type==='draw-accept'){endDraw();}
-    else if(msg.type==='resign'){showGameOver(myOnlineColor==='w'?'White Wins!':'Black Wins!','Opponent resigned');}
-  });
-  peerConn.on('close',()=>{
+  } else if(msg.type==='draw-accept'){ endDraw(); }
+  else if(msg.type==='resign'){
+    showGameOver(myOnlineColor==='w'?'White Wins!':'Black Wins!','Opponent resigned');
+  } else if(msg.type==='disconnected'){
     document.getElementById('conn-status').textContent='Opponent disconnected';
     document.getElementById('conn-dot').className='dot';
-  });
+  }
+}
+
+async function sendOnlineMessage(msg){
+  if(!onlineRoom) return;
+  try {
+    await fbPush('/rooms/'+onlineRoom+'/messages', {...msg, from: myOnlineColor, ts: Date.now()});
+  } catch(e){}
 }
 
 function sendOnlineMove(move){
-  if(peerConn&&peerConn.open) peerConn.send(JSON.stringify({type:'move',move}));
+  sendOnlineMessage({type:'move', move});
 }
 
 function startOnlineGame(){
@@ -1607,7 +1626,7 @@ function startOnlineGame(){
 }
 
 function copyCode(){
-  navigator.clipboard.writeText(onlineRoom).then(()=>{
+  navigator.clipboard.writeText(onlineRoom||'').then(()=>{
     const btn=document.querySelector('.copy-btn');
     btn.textContent='Copied!';
     setTimeout(()=>btn.textContent='Copy Code',1500);
@@ -1618,7 +1637,7 @@ function copyCode(){
 function offerDraw(){
   if(G.gameOver) return;
   if(gameMode==='online'){
-    if(peerConn) peerConn.send(JSON.stringify({type:'draw-offer'}));
+    sendOnlineMessage({type:'draw-offer'});
     document.getElementById('status-bar').textContent='Draw offered...';
   } else {
     if(confirm('Accept draw?')) endDraw();
@@ -1628,8 +1647,7 @@ function endDraw(){ if(G.gameOver) return; G.gameOver=true; showGameOver('Draw',
 function resign(){
   if(G.gameOver) return;
   if(!confirm('Resign?')) return;
-  if(gameMode==='online'&&peerConn) peerConn.send(JSON.stringify({type:'resign'}));
-  // Resigning player loses — opponent wins
+  if(gameMode==='online') sendOnlineMessage({type:'resign'});
   const winner = G.turn==='w' ? 'Black' : 'White';
   showGameOver(winner+' Wins!','By resignation');
 }
@@ -1685,7 +1703,7 @@ function backToMenu(){
   gameOverFired = false;
   pendingPromo = null;
   selected = null; legalMovesForSel = [];
-  if(peerInstance){try{peerInstance.destroy();}catch(e){} peerInstance=null; peerConn=null;}
+  cleanupOnline();
   document.getElementById('status-bar').textContent='';
   showScreen('menu-screen');
 }
