@@ -365,7 +365,64 @@
   }
   @keyframes voicepulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.7)} }
 
-  /* ===== PROMOTION MODAL ===== */
+  /* ===== CAPTURE ANIMATION ===== */
+  .capture-fly {
+    position: fixed; z-index: 9999; pointer-events: none;
+    width: 44px; height: 44px;
+    animation: captureFly 0.65s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  }
+  @keyframes captureFly {
+    0%   { transform: scale(1.3) rotate(0deg);   opacity: 1; }
+    40%  { transform: scale(0.9) rotate(200deg); opacity: 1; }
+    70%  { transform: scale(0.6) rotate(340deg); opacity: 0.8; }
+    100% { transform: scale(0.3) rotate(420deg); opacity: 0; }
+  }
+  .capture-particle {
+    position: fixed; z-index: 9998; pointer-events: none;
+    width: 8px; height: 8px; border-radius: 50%;
+    animation: particleBurst 0.6s ease-out forwards;
+  }
+  @keyframes particleBurst {
+    0%   { transform: translate(0,0) scale(1); opacity: 1; }
+    100% { transform: translate(var(--px), var(--py)) scale(0); opacity: 0; }
+  }
+  .capture-points {
+    position: fixed; z-index: 9999; pointer-events: none;
+    font-family: 'Playfair Display', serif;
+    font-size: 1.4rem; font-weight: 700;
+    color: #ffd700;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.8), 0 0 20px rgba(255,215,0,0.6);
+    animation: pointsFloat 1s ease-out forwards;
+  }
+  @keyframes pointsFloat {
+    0%   { transform: translateY(0)   scale(0.5); opacity: 0; }
+    20%  { transform: translateY(-10px) scale(1.3); opacity: 1; }
+    60%  { transform: translateY(-30px) scale(1);   opacity: 1; }
+    100% { transform: translateY(-55px) scale(0.8); opacity: 0; }
+  }
+  .capture-shockwave {
+    position: fixed; z-index: 9997; pointer-events: none;
+    border-radius: 50%; border: 3px solid rgba(255,200,50,0.8);
+    animation: shockwave 0.5s ease-out forwards;
+  }
+  @keyframes shockwave {
+    0%   { width: 10px; height: 10px; opacity: 0.9; margin-left:-5px; margin-top:-5px; }
+    100% { width: 80px; height: 80px; opacity: 0; margin-left:-40px; margin-top:-40px; }
+  }
+  .sq.capture-flash { animation: captureFlash 0.4s ease-out; }
+  @keyframes captureFlash {
+    0%   { filter: brightness(3); }
+    50%  { filter: brightness(2) saturate(2); }
+    100% { filter: brightness(1); }
+  }
+  .tray-bounce {
+    animation: trayBounce 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  }
+  @keyframes trayBounce {
+    0%,100% { transform: scale(1); }
+    30%     { transform: scale(1.4) rotate(-5deg); }
+    60%     { transform: scale(0.9) rotate(3deg); }
+  }
   #promo-modal.open { display: flex !important; visibility: visible !important; }
   .promo-box { background: var(--panel); border: 2px solid var(--accent); border-radius: 14px; padding: 24px 28px; text-align: center; min-width: 320px; }
   .promo-box h3 { font-family: 'Playfair Display', serif; color: var(--accent); margin-bottom: 16px; font-size:1.2rem; }
@@ -700,6 +757,21 @@ document.addEventListener('DOMContentLoaded', ()=>{
     }
   });
   loadPlayerName();
+});
+
+// Auto-save game when tab is closed/refreshed accidentally
+window.addEventListener('beforeunload', ()=>{
+  if(gameMode==='online' && onlineRoom && G.history && G.history.length > 0 && !G.gameOver){
+    const state = {
+      board: G.board, turn: G.turn, castling: G.castling,
+      enPassant: G.enPassant, history: G.history,
+      captured: G.captured, posHistory: G.posHistory,
+      savedAt: Date.now(), expiresAt: Date.now() + 30*60*1000
+    };
+    // sendBeacon works even when tab is closing
+    navigator.sendBeacon(FB_URL+'/rooms/'+onlineRoom+'/gameState.json', JSON.stringify(state));
+    navigator.sendBeacon(FB_URL+'/rooms/'+onlineRoom+'/status.json', JSON.stringify('paused'));
+  }
 });
 
 function cancelLocalStart(){
@@ -1301,6 +1373,93 @@ let aiDiff=1, playerColor='w', gameMode='local';
 let historyStack=[];
 let localP1Name='Player 1', localP2Name='Player 2';
 
+// ===================== CAPTURE ANIMATION =====================
+const CAPTURE_COLORS = {
+  w: ['#ffd700','#fff8dc','#ffec8b','#ffa500','#ff8c00'],
+  b: ['#ff6347','#ff4500','#dc143c','#ff69b4','#9370db']
+};
+
+function triggerCaptureAnimation(capturedPiece, toSquareEl, capturingColor){
+  if(!toSquareEl || !capturedPiece) return;
+  const rect = toSquareEl.getBoundingClientRect();
+  const cx = rect.left + rect.width/2;
+  const cy = rect.top  + rect.height/2;
+
+  // 1. Flash the square
+  toSquareEl.classList.add('capture-flash');
+  setTimeout(()=>toSquareEl.classList.remove('capture-flash'), 400);
+
+  // 2. Shockwave ring
+  const wave = document.createElement('div');
+  wave.className = 'capture-shockwave';
+  wave.style.left = cx+'px';
+  wave.style.top  = cy+'px';
+  document.body.appendChild(wave);
+  setTimeout(()=>wave.remove(), 520);
+
+  // 3. Burst particles
+  const cols = CAPTURE_COLORS[color(capturedPiece)] || CAPTURE_COLORS.b;
+  for(let i=0;i<12;i++){
+    const angle = (i/12)*360 + Math.random()*15;
+    const dist  = 30 + Math.random()*45;
+    const px    = Math.cos(angle*Math.PI/180)*dist;
+    const py    = Math.sin(angle*Math.PI/180)*dist;
+    const size  = 5 + Math.random()*8;
+    const col   = cols[Math.floor(Math.random()*cols.length)];
+    const p = document.createElement('div');
+    p.className = 'capture-particle';
+    p.style.cssText = `left:${cx}px;top:${cy}px;width:${size}px;height:${size}px;
+      background:${col};--px:${px}px;--py:${py}px;
+      animation-delay:${Math.random()*0.08}s;
+      animation-duration:${0.4+Math.random()*0.3}s;`;
+    document.body.appendChild(p);
+    setTimeout(()=>p.remove(), 900);
+  }
+
+  // 4. Fly piece to tray
+  const flyEl = document.createElement('div');
+  flyEl.style.cssText = `position:fixed;z-index:9999;pointer-events:none;
+    width:44px;height:44px;left:${cx-22}px;top:${cy-22}px;transition:none;`;
+  flyEl.innerHTML = pieceSVG(capturedPiece);
+  document.body.appendChild(flyEl);
+
+  const trayId = capturingColor==='w' ? 'cap-white' : 'cap-black';
+  const tray   = document.getElementById(trayId);
+  const tRect  = tray.getBoundingClientRect();
+  const tx = tRect.left + tRect.width/2;
+  const ty = tRect.top  + tRect.height/2;
+
+  // Arc trajectory via Web Animations API using transform for cross-browser support
+  const dx1 = (tx-cx)*0.4;
+  const dy1 = Math.min(cy,ty) - cy - 60;
+  const dx2 = tx - cx;
+  const dy2 = ty - cy;
+
+  flyEl.animate([
+    { transform:'translate(0px,0px)       scale(1.3) rotate(0deg)',   opacity:'1' },
+    { transform:`translate(${dx1}px,${dy1}px) scale(1)   rotate(200deg)`, opacity:'1' },
+    { transform:`translate(${dx2}px,${dy2}px) scale(0.25) rotate(400deg)`, opacity:'0' }
+  ],{ duration:700, easing:'cubic-bezier(0.25,0.46,0.45,0.94)', fill:'forwards' })
+  .onfinish = ()=>{
+    flyEl.remove();
+    // Bounce last icon in tray
+    const last = tray.lastElementChild;
+    if(last){ last.classList.add('tray-bounce'); setTimeout(()=>last.classList.remove('tray-bounce'),400); }
+  };
+
+  // 5. Points popup
+  const pts = PIECE_VALS[type(capturedPiece)];
+  if(pts > 0){
+    const ptEl = document.createElement('div');
+    ptEl.className = 'capture-points';
+    ptEl.textContent = '+'+pts;
+    ptEl.style.left = (cx-20)+'px';
+    ptEl.style.top  = (cy-20)+'px';
+    document.body.appendChild(ptEl);
+    setTimeout(()=>ptEl.remove(), 1100);
+  }
+}
+
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
@@ -1492,10 +1651,18 @@ function doMove(move){
   const notation=moveNotation(G.board,move,lm);
   const {board:nb,enPassant:nep,castling:nc,captured:cap}=applyMove(G.board,move,G.enPassant,G.castling);
 
+  const capturingColor = G.turn; // save BEFORE turn flips
   G.board=nb;
   G.castling=nc;
   G.enPassant=nep;
-  if(cap) G.captured[G.turn].push(cap);
+  if(cap){
+    G.captured[capturingColor].push(cap);
+    // Trigger capture animation after board re-renders
+    setTimeout(()=>{
+      const toSq = document.querySelector(`[data-r="${move.to[0]}"][data-f="${move.to[1]}"]`);
+      triggerCaptureAnimation(cap, toSq, capturingColor);
+    }, 50);
+  }
   G.history.push(notation);
   G.turn=opp(G.turn);
   lastMove=move;
@@ -1826,54 +1993,92 @@ async function joinRoom(){
 
     // Check if room has expired
     if(room.expiresAt && Date.now() > room.expiresAt){
-      setMsg('❌ Room has expired. Please create a new room.'); return;
+      setMsg('❌ Room has expired (30 min limit). Please create a new room.'); return;
     }
 
-    const isPaused = room.status === 'paused';
-    const isWaiting = room.status === 'waiting';
+    const status = room.status || 'waiting';
+    const hasGameState = !!(room.gameState);
 
-    if(!isPaused && !isWaiting){
-      setMsg('❌ Room already in use. Ask host to create a new room.'); return;
+    // Determine who this player is — host or guest
+    const isHost  = room.host  && room.host  === playerName;
+    const isGuest = room.guest && room.guest === playerName;
+
+    // Allowed join conditions:
+    // 1. Fresh room waiting for guest
+    // 2. Room is paused — anyone with the code can rejoin
+    // 3. Room is active (joined/resumed) but this player is the host or guest by name
+    // 4. Room is active but no game started yet (no game state) — treat as waiting
+    const canJoin =
+      status === 'waiting' ||
+      status === 'paused'  ||
+      (hasGameState && (isHost || isGuest)) ||
+      (!hasGameState && status === 'joined');
+
+    if(!canJoin){
+      setMsg('❌ Room is in use by other players. Ask them to create a new room.');
+      return;
     }
 
-    const guestColor = room.guestColor || 'b';
-    const hostName = room.host || 'Opponent';
-    const resuming = isPaused && room.gameState;
+    // Determine color — host keeps their color, guest keeps theirs
+    let myColor;
+    if(isHost){
+      myColor = room.hostColor || 'w';
+    } else if(isGuest){
+      myColor = room.guestColor || 'b';
+    } else if(status === 'waiting'){
+      // Fresh join as guest
+      myColor = room.guestColor || 'b';
+    } else {
+      // Unrecognised player trying to join active room
+      setMsg('❌ Room is in use. Please create a new room.');
+      return;
+    }
 
-    // Mark as joined/resumed
+    const hostName  = room.host  || 'Opponent';
+    const guestName = room.guest || playerName;
+    const resuming  = hasGameState && (status === 'paused' || status === 'joined' || status === 'resumed');
+
+    // Update Firebase with new status and guest name if fresh join
+    if(status === 'waiting'){
+      await fbWrite('/rooms/'+code+'/guest', playerName);
+    }
     await fbWrite('/rooms/'+code+'/status', resuming ? 'resumed' : 'joined');
-    await fbWrite('/rooms/'+code+'/guest', playerName);
 
     onlineRoom = code;
-    myOnlineColor = guestColor;
+    myOnlineColor = myColor;
     savedHostColor = room.hostColor || 'w';
     fbLastMsgIndex = -1;
 
     if(resuming){
-      setMsg('✅ Rejoined! Resuming game...');
+      setMsg('✅ Rejoined! Resuming game... You play '+(myColor==='w'?'White ♔':'Black ♚'));
     } else {
-      setMsg('✅ Joined! You play '+(guestColor==='w'?'White ♔':'Black ♚'));
+      setMsg('✅ Joined! You play '+(myColor==='w'?'White ♔':'Black ♚'));
     }
 
     startOnlineGame();
 
-    // Show host name on their bar
-    if(guestColor==='b'){
-      document.getElementById('name-white').textContent = hostName;
+    // Set opponent name on their bar
+    const opponentName = isHost ? guestName : hostName;
+    if(myColor==='w'){
+      document.getElementById('name-black').textContent = opponentName;
     } else {
-      document.getElementById('name-black').textContent = hostName;
+      document.getElementById('name-white').textContent = opponentName;
     }
 
     startPollingMessages();
 
-    // Resume game state if paused
+    // Resume game state if available
     if(resuming){
       await loadGameState(code, room);
-      // Notify host to also resume
-      await sendOnlineMessage({type:'resume', hostName});
+      await sendOnlineMessage({type:'resume'});
     }
+
+    // Dismiss resume banner if shown
+    dismissResume();
+
   } catch(e){
     setMsg('❌ Connection error. Try again.');
+    console.error(e);
   }
 }
 
@@ -2352,20 +2557,28 @@ function playVoiceMsg(audioId, bubble){
 }
 
 // ===================== VOICE CHAT (WebRTC + Firebase signaling) =====================
-let voicePeer = null;        // RTCPeerConnection
-let localStream = null;      // my microphone stream
-let remoteAudio = null;      // <audio> element for opponent
-let voiceActive = false;     // call is live
-let voiceMuted = false;      // mic muted
-let voicePolling = null;     // interval to check Firebase signaling
-let voiceSignalIndex = -1;   // last processed signal index
-let isCaller = false;        // did I initiate the call
+let voicePeer = null;
+let localStream = null;
+let remoteAudio = null;
+let voiceActive = false;
+let voiceMuted = false;
+let voicePolling = null;
+let voiceSignalIndex = -1;
+let isCaller = false;
+let pendingIceCandidates = []; // queue ICE candidates until remote desc is set
 
 const ICE_SERVERS = {
   iceServers:[
-    {urls:'stun:stun.l.google.com:19302'},
-    {urls:'stun:stun1.l.google.com:19302'},
-    {urls:'stun:stun2.l.google.com:19302'}
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:global.stun.twilio.com:3478' },
+    // Free TURN servers via Open Relay Project
+    { urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turns:openrelay.metered.ca:443?transport=tcp',
+      username: 'openrelayproject', credential: 'openrelayproject' }
   ]
 };
 
@@ -2375,6 +2588,7 @@ function initVoice(){
   document.getElementById('voice-btn').textContent = '📞 Call';
   document.getElementById('voice-btn').className = 'voice-btn';
   voiceSignalIndex = -1;
+  pendingIceCandidates = [];
   startVoiceSignalPolling();
 }
 
@@ -2392,17 +2606,14 @@ function setVoiceStatus(txt, active, calling){
 
 async function toggleVoice(){
   if(voiceActive){
-    // Active call — end it
     sendVoiceSignal({type:'hangup'});
     stopVoice();
     appendSystemMessage('Voice call ended.');
   } else if(voicePeer && !voiceActive){
-    // Outgoing call pending — cancel it
     sendVoiceSignal({type:'hangup'});
     stopVoice();
     appendSystemMessage('Call cancelled.');
   } else {
-    // No call — start one
     await startCall();
   }
 }
@@ -2425,25 +2636,18 @@ async function toggleMute(){
   }
 }
 
-async function startCall(){
-  try {
-    localStream = await navigator.mediaDevices.getUserMedia({audio:true, video:false});
-  } catch(e){
-    appendSystemMessage('❌ Microphone access denied.');
-    return;
-  }
-  isCaller = true;
-  voicePeer = new RTCPeerConnection(ICE_SERVERS);
-  localStream.getTracks().forEach(t => voicePeer.addTrack(t, localStream));
+function createPeerConnection(onConnected){
+  const peer = new RTCPeerConnection(ICE_SERVERS);
 
-  voicePeer.onicecandidate = e => {
+  peer.onicecandidate = e => {
     if(e.candidate) sendVoiceSignal({type:'ice', candidate: e.candidate});
   };
-  voicePeer.ontrack = e => {
-    playRemoteAudio(e.streams[0]);
-  };
-  voicePeer.onconnectionstatechange = () => {
-    if(voicePeer.connectionState === 'connected'){
+
+  peer.ontrack = e => { playRemoteAudio(e.streams[0]); };
+
+  peer.onconnectionstatechange = () => {
+    const state = peer.connectionState;
+    if(state === 'connected'){
       voiceActive = true;
       voiceMuted = false;
       setVoiceStatus('🎤 Connected', true);
@@ -2452,11 +2656,34 @@ async function startCall(){
       document.getElementById('mute-btn').style.display = 'block';
       document.getElementById('mute-btn').textContent = '🔇';
       document.getElementById('mute-btn').className = 'voice-btn';
-      appendSystemMessage('Voice call connected!');
-    } else if(['disconnected','failed','closed'].includes(voicePeer.connectionState)){
+      if(onConnected) onConnected();
+      appendSystemMessage('✅ Voice call connected!');
+    } else if(['disconnected','failed','closed'].includes(state)){
       stopVoice();
     }
   };
+
+  peer.onicegatheringstatechange = () => {
+    if(peer.iceGatheringState === 'failed'){
+      appendSystemMessage('❌ Voice call failed — network issue.');
+      stopVoice();
+    }
+  };
+
+  return peer;
+}
+
+async function startCall(){
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({audio:true, video:false});
+  } catch(e){
+    appendSystemMessage('❌ Microphone access denied. Please allow mic in browser settings.');
+    return;
+  }
+  isCaller = true;
+  pendingIceCandidates = [];
+  voicePeer = createPeerConnection();
+  localStream.getTracks().forEach(t => voicePeer.addTrack(t, localStream));
 
   const offer = await voicePeer.createOffer();
   await voicePeer.setLocalDescription(offer);
@@ -2464,64 +2691,110 @@ async function startCall(){
 
   setVoiceStatus('📞 Calling...', false, true);
   document.getElementById('voice-btn').textContent = '📵 Cancel';
-  appendSystemMessage('Voice call started — waiting for opponent...');
+  appendSystemMessage('📞 Calling opponent... (they will see an Accept button in chat)');
+}
+
+// Show an in-chat accept button instead of blocking confirm()
+function showIncomingCallUI(callerName, onAccept, onDecline){
+  const cm = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.className = 'chat-bubble system';
+  div.id = 'incoming-call-ui';
+  div.innerHTML = `
+    <div style="background:var(--panel);border:1px solid var(--accent);border-radius:8px;padding:10px;text-align:center;">
+      <div style="color:var(--accent);font-family:'Playfair Display',serif;margin-bottom:8px;">
+        📞 ${escapeHtml(callerName)} is calling
+      </div>
+      <div style="display:flex;gap:8px;justify-content:center;">
+        <button onclick="acceptIncomingCall()" style="padding:6px 16px;background:#2d5a2d;color:#a8e6a8;border:1px solid #4caf50;border-radius:6px;cursor:pointer;font-family:'Crimson Text',serif;">✅ Accept</button>
+        <button onclick="declineIncomingCall()" style="padding:6px 14px;background:#5a2d2d;color:#e6a8a8;border:1px solid #cf6060;border-radius:6px;cursor:pointer;font-family:'Crimson Text',serif;">❌ Decline</button>
+      </div>
+    </div>`;
+  cm.appendChild(div);
+  cm.scrollTop = cm.scrollHeight;
+  // Switch to chat tab so they see it
+  switchTab('chat');
+  // Show unread badge on chat tab if on history
+  if(currentTab !== 'chat'){
+    chatUnreadCount++;
+    const badge = document.getElementById('chat-unread');
+    badge.textContent = '📞';
+    badge.classList.add('show');
+  }
+}
+
+let _incomingCallSig = null;
+
+async function acceptIncomingCall(){
+  const callUI = document.getElementById('incoming-call-ui');
+  if(callUI) callUI.remove();
+  const sig = _incomingCallSig;
+  if(!sig) return;
+  _incomingCallSig = null;
+
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({audio:true, video:false});
+  } catch(e){
+    appendSystemMessage('❌ Microphone access denied.');
+    sendVoiceSignal({type:'hangup'});
+    return;
+  }
+
+  isCaller = false;
+  pendingIceCandidates = [];
+  voicePeer = createPeerConnection();
+  localStream.getTracks().forEach(t => voicePeer.addTrack(t, localStream));
+
+  await voicePeer.setRemoteDescription(new RTCSessionDescription(sig.sdp));
+
+  // Flush any ICE candidates that arrived before we set remote desc
+  for(const c of pendingIceCandidates){
+    try { await voicePeer.addIceCandidate(new RTCIceCandidate(c)); } catch(e){}
+  }
+  pendingIceCandidates = [];
+
+  const answer = await voicePeer.createAnswer();
+  await voicePeer.setLocalDescription(answer);
+  sendVoiceSignal({type:'answer', sdp: answer});
+  setVoiceStatus('📞 Connecting...', false, true);
+  document.getElementById('voice-btn').textContent = '📵 Cancel';
+  appendSystemMessage('Connecting voice call...');
+}
+
+function declineIncomingCall(){
+  const callUI = document.getElementById('incoming-call-ui');
+  if(callUI) callUI.remove();
+  _incomingCallSig = null;
+  sendVoiceSignal({type:'hangup'});
+  appendSystemMessage('Voice call declined.');
 }
 
 async function handleVoiceSignal(sig){
   if(sig.type === 'offer'){
-    // Receive call
-    const accept = confirm('📞 '+( sig.callerName||'Opponent')+' is calling. Accept voice chat?');
-    if(!accept){
-      sendVoiceSignal({type:'hangup'});
-      appendSystemMessage('Voice call declined.');
-      return;
-    }
-    try {
-      localStream = await navigator.mediaDevices.getUserMedia({audio:true, video:false});
-    } catch(e){
-      appendSystemMessage('❌ Microphone access denied.');
-      return;
-    }
-    isCaller = false;
-    voicePeer = new RTCPeerConnection(ICE_SERVERS);
-    localStream.getTracks().forEach(t => voicePeer.addTrack(t, localStream));
-
-    voicePeer.onicecandidate = e => {
-      if(e.candidate) sendVoiceSignal({type:'ice', candidate: e.candidate});
-    };
-    voicePeer.ontrack = e => {
-      playRemoteAudio(e.streams[0]);
-    };
-    voicePeer.onconnectionstatechange = () => {
-      if(voicePeer.connectionState === 'connected'){
-        voiceActive = true;
-        voiceMuted = false;
-        setVoiceStatus('🎤 Connected', true);
-        document.getElementById('voice-btn').textContent = '📵 End';
-        document.getElementById('voice-btn').className = 'voice-btn active';
-        document.getElementById('mute-btn').style.display = 'block';
-        document.getElementById('mute-btn').textContent = '🔇';
-        document.getElementById('mute-btn').className = 'voice-btn';
-        appendSystemMessage('Voice call connected!');
-      } else if(['disconnected','failed','closed'].includes(voicePeer.connectionState)){
-        stopVoice();
-      }
-    };
-
-    await voicePeer.setRemoteDescription(new RTCSessionDescription(sig.sdp));
-    const answer = await voicePeer.createAnswer();
-    await voicePeer.setLocalDescription(answer);
-    sendVoiceSignal({type:'answer', sdp: answer});
-    setVoiceStatus('📞 Connecting...', false, true);
-    document.getElementById('voice-btn').textContent = '📵 Cancel';
+    // Store the signal and show in-chat UI instead of blocking confirm()
+    _incomingCallSig = sig;
+    showIncomingCallUI(sig.callerName || 'Opponent');
 
   } else if(sig.type === 'answer' && voicePeer){
     await voicePeer.setRemoteDescription(new RTCSessionDescription(sig.sdp));
+    // Flush pending ICE candidates
+    for(const c of pendingIceCandidates){
+      try { await voicePeer.addIceCandidate(new RTCIceCandidate(c)); } catch(e){}
+    }
+    pendingIceCandidates = [];
 
-  } else if(sig.type === 'ice' && voicePeer){
-    try { await voicePeer.addIceCandidate(new RTCIceCandidate(sig.candidate)); } catch(e){}
+  } else if(sig.type === 'ice'){
+    if(voicePeer && voicePeer.remoteDescription){
+      try { await voicePeer.addIceCandidate(new RTCIceCandidate(sig.candidate)); } catch(e){}
+    } else {
+      // Queue it — remote description not set yet
+      pendingIceCandidates.push(sig.candidate);
+    }
 
   } else if(sig.type === 'hangup'){
+    const callUI = document.getElementById('incoming-call-ui');
+    if(callUI) callUI.remove();
+    _incomingCallSig = null;
     appendSystemMessage('Opponent ended the voice call.');
     stopVoice();
   }
