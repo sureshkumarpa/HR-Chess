@@ -528,7 +528,10 @@
         <button class="color-btn" id="online-black-btn" onclick="selOnlineColor('b',this)">Black ♚</button>
         <button class="color-btn" id="online-rand-btn" onclick="selOnlineColor('r',this)">Random 🎲</button>
       </div>
-      <button class="diff-btn" onclick="createRoom()" style="width:100%;">Create Room</button>
+      <div style="display:flex; gap:8px;">
+        <button class="diff-btn" onclick="createRoom()" style="flex:1; background:var(--accent); color:#1a0a00; border-color:var(--accent);">▶ Start &amp; Create Room</button>
+        <button class="diff-btn" onclick="document.getElementById('create-room-row').style.display='none'" style="padding:8px 12px;">✕</button>
+      </div>
     </div>
 
     <div id="join-row" class="room-input" style="display:none">
@@ -1502,6 +1505,13 @@ function doMove(move){
   if(gameMode==='online' && G.history.length===1){
     document.getElementById('swap-btn').style.display='none';
     document.getElementById('swap-msg').textContent='';
+    // Update connection status to reflect active game
+    const connStatus = document.getElementById('conn-status');
+    if(connStatus.textContent.includes('Waiting for host') ||
+       connStatus.textContent.includes('Opponent connected')){
+      document.getElementById('conn-dot').className = 'dot connected';
+      connStatus.textContent = 'Game in progress';
+    }
   }
   renderBoard();
 
@@ -2022,7 +2032,7 @@ function startOnlineGame(){
     // Joiner plays black - white (host) moves first, so joiner is also blocked initially
     // but we DON'T set gameOver=true because that would confuse the state
     document.getElementById('conn-dot').className = 'dot connected';
-    document.getElementById('conn-status').textContent = 'Connected! Waiting for host...';
+    document.getElementById('conn-status').textContent = '✅ Connected! White moves first.';
     // Show swap button for joiner immediately
     document.getElementById('swap-btn').style.display = 'block';
     // Enable voice for joiner right away
