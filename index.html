@@ -137,7 +137,7 @@
 
   /* ===== NAME MODAL ===== */
   #name-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.82); align-items:center; justify-content:center; z-index:200; }
-  #name-modal.open { display:flex; }
+  #name-modal.open { display:flex !important; }
   .name-box { background:var(--panel); border:2px solid var(--accent); border-radius:14px; padding:32px 36px; text-align:center; max-width:340px; width:90%; }
   .name-box h2 { font-family:'Playfair Display',serif; color:var(--accent); font-size:1.6rem; margin-bottom:8px; }
   .name-box p { color:var(--text-muted); margin-bottom:20px; font-size:1rem; }
@@ -148,7 +148,7 @@
 
   /* ===== STATS MODAL ===== */
   #stats-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.82); align-items:flex-start; justify-content:center; z-index:200; overflow-y:auto; padding:20px 0; }
-  #stats-modal.open { display:flex; }
+  #stats-modal.open { display:flex !important; }
   .stats-box { background:var(--panel); border:2px solid var(--accent); border-radius:14px; padding:28px 28px; max-width:680px; width:94%; margin:auto; }
   .stats-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
   .stats-header h2 { font-family:'Playfair Display',serif; color:var(--accent); font-size:1.5rem; }
@@ -187,7 +187,7 @@
 
   /* ===== 2-PLAYER NAME MODAL ===== */
   #local-names-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.82); align-items:center; justify-content:center; z-index:200; }
-  #local-names-modal.open { display:flex; }
+  #local-names-modal.open { display:flex !important; }
   .local-names-box { background:var(--panel); border:2px solid var(--accent); border-radius:14px; padding:32px 36px; text-align:center; max-width:360px; width:92%; }
   .local-names-box h2 { font-family:'Playfair Display',serif; color:var(--accent); font-size:1.5rem; margin-bottom:6px; }
   .local-names-box p { color:var(--text-muted); font-size:0.95rem; margin-bottom:22px; }
@@ -364,19 +364,28 @@
     animation:voicepulse 0.8s ease-in-out infinite;
   }
   @keyframes voicepulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.7)} }
-    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+
+  /* ===== PROMOTION MODAL ===== */
+  #promo-modal {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85);
     align-items: center; justify-content: center; z-index: 100;
   }
-  #promo-modal.open { display: flex; }
-  .promo-box { background: var(--panel); border: 2px solid var(--accent); border-radius: 12px; padding: 24px; text-align: center; }
-  .promo-box h3 { font-family: 'Playfair Display', serif; color: var(--accent); margin-bottom: 16px; }
-  .promo-pieces { display: flex; gap: 12px; justify-content: center; }
-  .promo-piece { font-size: 2.8rem; cursor: pointer; padding: 8px; border-radius: 8px; transition: background 0.1s; }
-  .promo-piece:hover { background: rgba(212,168,67,0.2); }
+  #promo-modal.open { display: flex !important; }
+  .promo-box { background: var(--panel); border: 2px solid var(--accent); border-radius: 14px; padding: 24px 28px; text-align: center; min-width: 320px; }
+  .promo-box h3 { font-family: 'Playfair Display', serif; color: var(--accent); margin-bottom: 16px; font-size:1.2rem; }
+  .promo-pieces { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .promo-piece-btn {
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    cursor: pointer; padding: 10px 8px; border-radius: 10px;
+    border: 2px solid transparent; transition: border-color 0.15s, background 0.15s;
+    background: var(--captured-bg); width: 72px;
+  }
+  .promo-piece-btn:hover { border-color: var(--accent); background: rgba(212,168,67,0.12); }
+  .promo-piece-btn svg { width: 52px; height: 52px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); }
+  .promo-piece-label { font-family: 'Playfair Display', serif; font-size: 0.75rem; color: var(--text-muted); }
 
   /* ===== GAME OVER MODAL ===== */
-  #gameover-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); align-items: center; justify-content: center; z-index: 100; }
-  #gameover-modal.open { display: flex; }
+  #gameover-modal.open { display: flex !important; }
   .gameover-box { background: var(--panel); border: 2px solid var(--accent); border-radius: 12px; padding: 32px 40px; text-align: center; max-width: 340px; }
   .gameover-box h2 { font-family: 'Playfair Display', serif; color: var(--accent); font-size: 1.8rem; margin-bottom: 8px; }
   .gameover-box p { color: var(--text-muted); margin-bottom: 20px; font-size: 1.1rem; }
@@ -399,7 +408,7 @@
 <h1>♟ Chess</h1>
 
 <!-- NAME MODAL -->
-<div id="name-modal">
+<div id="name-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.82); align-items:center; justify-content:center; z-index:200;">
   <div class="name-box">
     <h2>Welcome!</h2>
     <p>Enter your name to track wins and game history.</p>
@@ -409,7 +418,7 @@
 </div>
 
 <!-- STATS MODAL -->
-<div id="stats-modal" onclick="handleStatsBackdrop(event)">
+<div id="stats-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.82); align-items:flex-start; justify-content:center; z-index:200; overflow-y:auto; padding:20px 0;" onclick="handleStatsBackdrop(event)">
   <div class="stats-box">
     <div class="stats-header">
       <h2 id="stats-player-title">Your Stats</h2>
@@ -438,7 +447,7 @@
 </div>
 
 <!-- LOCAL 2P NAMES MODAL -->
-<div id="local-names-modal" onclick="handleLocalModalBackdrop(event)">
+<div id="local-names-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.82); align-items:center; justify-content:center; z-index:200;" onclick="handleLocalModalBackdrop(event)">
   <div class="local-names-box">
     <h2>♔ vs ♚</h2>
     <p>Enter both players' names to begin</p>
@@ -460,6 +469,15 @@
   <div class="player-welcome">
     <span class="player-welcome-name" id="welcome-name">Guest</span>
     <button class="change-name-btn" onclick="openNameModal()">✏ Change Name</button>
+  </div>
+  <!-- Resume banner - shown when player left a paused game -->
+  <div id="resume-banner" style="display:none; background:#2d4a1e; border:1px solid #4caf50; border-radius:8px; padding:10px 16px; margin-bottom:14px; text-align:center;">
+    <p style="color:#a8e6a8; font-size:0.9rem; margin-bottom:6px;">♟ You have a paused game!</p>
+    <p style="color:#6dbf6d; font-family:'Playfair Display',serif; font-size:1.1rem; letter-spacing:0.1em; margin-bottom:8px;" id="resume-code-display"></p>
+    <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+      <button onclick="quickRejoin()" style="padding:6px 16px; background:#4caf50; color:#0a1f0a; border:none; border-radius:6px; cursor:pointer; font-family:'Crimson Text',serif; font-size:0.95rem; font-weight:600;">↩ Rejoin Game</button>
+      <button onclick="dismissResume()" style="padding:6px 14px; background:transparent; color:#6dbf6d; border:1px solid #4caf50; border-radius:6px; cursor:pointer; font-family:'Crimson Text',serif; font-size:0.9rem;">Dismiss</button>
+    </div>
   </div>
   <p class="menu-subtitle">Choose your game</p>
   <div class="menu-cards">
@@ -627,7 +645,7 @@
 </div>
 
 <!-- Promotion modal -->
-<div id="promo-modal">
+<div id="promo-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); align-items:center; justify-content:center; z-index:200;">
   <div class="promo-box">
     <h3>Promote Pawn</h3>
     <div class="promo-pieces" id="promo-pieces"></div>
@@ -635,7 +653,7 @@
 </div>
 
 <!-- Game over modal -->
-<div id="gameover-modal">
+<div id="gameover-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); align-items:center; justify-content:center; z-index:200;">
   <div class="gameover-box">
     <h2 id="go-title">Game Over</h2>
     <p id="go-msg">Checkmate!</p>
@@ -1505,9 +1523,15 @@ function runAI(){
 
 // ===================== PROMOTION =====================
 function showPromoModal(c){
-  const pieces=c==='w'?['wQ','wR','wB','wN']:['bQ','bR','bB','bN'];
-  const pp=document.getElementById('promo-pieces');
-  pp.innerHTML=pieces.map(p=>`<div class="promo-piece" onclick="completePromo('${type(p)}')" style="width:70px;height:70px;cursor:pointer;padding:6px;border-radius:8px;transition:background 0.1s;" onmouseover="this.style.background='rgba(212,168,67,0.2)'" onmouseout="this.style.background=''">${pieceSVG(p)}</div>`).join('');
+  const pieces = c==='w'
+    ? [{code:'wQ',label:'Queen'},{code:'wR',label:'Rook'},{code:'wB',label:'Bishop'},{code:'wN',label:'Knight'}]
+    : [{code:'bQ',label:'Queen'},{code:'bR',label:'Rook'},{code:'bB',label:'Bishop'},{code:'bN',label:'Knight'}];
+  const pp = document.getElementById('promo-pieces');
+  pp.innerHTML = pieces.map(p=>`
+    <div class="promo-piece-btn" onclick="completePromo('${type(p.code)}')">
+      ${pieceSVG(p.code)}
+      <span class="promo-piece-label">${p.label}</span>
+    </div>`).join('');
   document.getElementById('promo-modal').classList.add('open');
 }
 
@@ -1645,19 +1669,88 @@ async function fbDelete(path){
   await fetch(FB_URL+path+'.json', {method:'DELETE'});
 }
 
-function cleanupOnline(){
+async function cleanupOnline(saveState){
   if(fbPollInterval){ clearInterval(fbPollInterval); fbPollInterval=null; }
+  // Save game state before clearing onlineRoom
+  if(saveState && onlineRoom && G.history && G.history.length > 0 && !G.gameOver){
+    await saveGameState();
+  }
   if(onlineRoom){ onlineRoom=null; }
   cleanupVoice();
   clearChat();
 }
 
-let onlineHostColor = 'w'; // host's chosen color: 'w', 'b', or 'r' (random)
+// ---- Save & Resume ----
+async function saveGameState(){
+  if(!onlineRoom) return;
+  try {
+    const state = {
+      board: G.board,
+      turn: G.turn,
+      castling: G.castling,
+      enPassant: G.enPassant,
+      history: G.history,
+      captured: G.captured,
+      posHistory: G.posHistory,
+      savedAt: Date.now(),
+      expiresAt: Date.now() + 30*60*1000
+    };
+    await fbWrite('/rooms/'+onlineRoom+'/gameState', state);
+    await fbWrite('/rooms/'+onlineRoom+'/status', 'paused');
+  } catch(e){}
+}
+
+async function loadGameState(code, room){
+  const s = room.gameState;
+  if(!s) return;
+  G.board = s.board;
+  G.turn = s.turn;
+  G.castling = s.castling || {wK:true,wQ:true,bK:true,bQ:true};
+  G.enPassant = s.enPassant || null;
+  G.history = s.history || [];
+  G.captured = s.captured || {w:[],b:[]};
+  G.posHistory = s.posHistory || [];
+  G.gameOver = false;
+  gameOverFired = false;
+  historyStack = [];
+  lastMove = null;
+  selected = null;
+  legalMovesForSel = [];
+  // Unblock game for the host who was waiting
+  renderBoard();
+  updateMoveHistory();
+  appendSystemMessage('♟ Game resumed — '+G.history.length+' moves played so far.');
+}
+
+let pausedRoomCode = null; // room code of paused game
+
+function showResumeBanner(code, timeLeftMins){
+  pausedRoomCode = code;
+  document.getElementById('resume-banner').style.display='block';
+  document.getElementById('resume-code-display').textContent =
+    'Room: '+code+' · '+timeLeftMins+' min remaining';
+}
+
+function dismissResume(){
+  pausedRoomCode = null;
+  document.getElementById('resume-banner').style.display='none';
+}
+
+function quickRejoin(){
+  if(!pausedRoomCode) return;
+  openOnlineOptions();
+  showJoinRoom();
+  document.getElementById('join-code').value = pausedRoomCode;
+  // Small delay to let the panel open and scroll into view first
+  setTimeout(()=>joinRoom(), 400);
+} // end quickRejoin
+
+let onlineHostColor = 'w';
+let savedHostColor = 'w'; // persists across newGame() calls
 
 function showCreateRoom(){
   document.getElementById('create-room-row').style.display='block';
   document.getElementById('join-row').style.display='none';
-  // Reset to default selection
   onlineHostColor='w';
   document.querySelectorAll('#create-room-row .color-btn').forEach(b=>b.classList.remove('sel'));
   document.getElementById('online-white-btn').classList.add('sel');
@@ -1675,8 +1768,7 @@ function showJoinRoom(){
 }
 
 async function createRoom(){
-  cleanupOnline();
-  // Resolve random color
+  cleanupOnline(false);
   const hostColor = onlineHostColor==='r' ? (Math.random()<0.5?'w':'b') : onlineHostColor;
   const guestColor = hostColor==='w' ? 'b' : 'w';
   const code = Math.random().toString(36).substr(2,6).toUpperCase();
@@ -1684,6 +1776,7 @@ async function createRoom(){
   try {
     await fbWrite('/rooms/'+code, {
       created: Date.now(),
+      expiresAt: Date.now() + 30*60*1000,
       host: playerName,
       hostColor: hostColor,
       guestColor: guestColor,
@@ -1692,19 +1785,22 @@ async function createRoom(){
     });
     onlineRoom = code;
     myOnlineColor = hostColor;
+    savedHostColor = hostColor;
     setMsg('✅ Room ready! Share code: '+code+' — You play '+(hostColor==='w'?'White ♔':'Black ♚'));
-    // Go to game screen
     startOnlineGame();
-    // Poll for joiner
     fbPollInterval = setInterval(async ()=>{
       try {
         const room = await fbRead('/rooms/'+code);
         if(!room){ return; }
-        if(room.status === 'joined'){
+        if(room.status === 'joined' || room.status === 'resumed'){
           clearInterval(fbPollInterval); fbPollInterval=null;
           fbLastMsgIndex = -1;
           markOpponentConnected(room.guest || 'Opponent');
           startPollingMessages();
+          // Resume saved state if exists
+          if(room.gameState && room.status === 'resumed'){
+            await loadGameState(code, room);
+          }
         }
       } catch(e){}
     }, 1500);
@@ -1716,30 +1812,60 @@ async function createRoom(){
 async function joinRoom(){
   const code = document.getElementById('join-code').value.trim().toUpperCase();
   if(code.length < 4){ setMsg('Please enter a valid room code.'); return; }
-  cleanupOnline();
+  cleanupOnline(false);
   setMsg('Looking for room '+code+'...');
   try {
     const room = await fbRead('/rooms/'+code);
     if(!room){ setMsg('❌ Room not found. Check the code.'); return; }
-    if(room.status !== 'waiting'){ setMsg('❌ Room already in use. Ask host to create a new room.'); return; }
-    // Joiner gets the opposite color of host
+
+    // Check if room has expired
+    if(room.expiresAt && Date.now() > room.expiresAt){
+      setMsg('❌ Room has expired. Please create a new room.'); return;
+    }
+
+    const isPaused = room.status === 'paused';
+    const isWaiting = room.status === 'waiting';
+
+    if(!isPaused && !isWaiting){
+      setMsg('❌ Room already in use. Ask host to create a new room.'); return;
+    }
+
     const guestColor = room.guestColor || 'b';
-    // Mark as joined and save guest name
-    await fbWrite('/rooms/'+code+'/status', 'joined');
+    const hostName = room.host || 'Opponent';
+    const resuming = isPaused && room.gameState;
+
+    // Mark as joined/resumed
+    await fbWrite('/rooms/'+code+'/status', resuming ? 'resumed' : 'joined');
     await fbWrite('/rooms/'+code+'/guest', playerName);
+
     onlineRoom = code;
     myOnlineColor = guestColor;
+    savedHostColor = room.hostColor || 'w';
     fbLastMsgIndex = -1;
-    const hostName = room.host || 'Opponent';
-    setMsg('✅ Joined! You play '+(guestColor==='w'?'White ♔':'Black ♚'));
-    startOnlineGame();
-    // Show host's real name on their colour bar
-    if(guestColor==='b'){
-      document.getElementById('name-white').textContent = hostName; // host is white
+
+    if(resuming){
+      setMsg('✅ Rejoined! Resuming game...');
     } else {
-      document.getElementById('name-black').textContent = hostName; // host is black
+      setMsg('✅ Joined! You play '+(guestColor==='w'?'White ♔':'Black ♚'));
     }
+
+    startOnlineGame();
+
+    // Show host name on their bar
+    if(guestColor==='b'){
+      document.getElementById('name-white').textContent = hostName;
+    } else {
+      document.getElementById('name-black').textContent = hostName;
+    }
+
     startPollingMessages();
+
+    // Resume game state if paused
+    if(resuming){
+      await loadGameState(code, room);
+      // Notify host to also resume
+      await sendOnlineMessage({type:'resume', hostName});
+    }
   } catch(e){
     setMsg('❌ Connection error. Try again.');
   }
@@ -1754,15 +1880,15 @@ function startPollingMessages(){
       const keys = Object.keys(msgs).sort();
       for(let i = fbLastMsgIndex+1; i < keys.length; i++){
         const msg = msgs[keys[i]];
-        if(msg.from === myOnlineColor) continue; // skip own messages
-        handleOnlineMessage(msg);
+        if(msg.from === myOnlineColor){ fbLastMsgIndex = i; continue; }
+        await handleOnlineMessage(msg);
         fbLastMsgIndex = i;
       }
     } catch(e){}
   }, 800);
 }
 
-function handleOnlineMessage(msg){
+async function handleOnlineMessage(msg){
   if(msg.type==='move'){
     executeMove(msg.move, msg.move.to[0], msg.move.to[1], true);
   } else if(msg.type==='draw-offer'){
@@ -1773,10 +1899,17 @@ function handleOnlineMessage(msg){
   } else if(msg.type==='draw-accept'){ endDraw(); }
   else if(msg.type==='resign'){
     showGameOver(myOnlineColor==='w'?'White Wins!':'Black Wins!','Opponent resigned');
+  } else if(msg.type==='resume'){
+    // Opponent rejoined and resumed — load saved state
+    const room = await fbRead('/rooms/'+onlineRoom);
+    if(room && room.gameState){
+      await loadGameState(onlineRoom, room);
+      markOpponentConnected(room.guest || 'Opponent');
+    }
   } else if(msg.type==='disconnected'){
-    document.getElementById('conn-status').textContent='Opponent disconnected';
     document.getElementById('conn-dot').className='dot';
-    appendSystemMessage('Opponent disconnected.');
+    document.getElementById('conn-status').textContent='Opponent left — game paused';
+    appendSystemMessage('⏸ Opponent disconnected. Game paused — they can rejoin with code: '+onlineRoom+' within 30 min.');
   } else if(msg.type==='swap-request'){
     // Opponent wants to swap — ask this player
     const swapMsg = document.getElementById('swap-msg');
@@ -2497,7 +2630,21 @@ function showGameOver(title, msg){
     recordGame(result, oppName, gameMode, totalMoves);
   }
 }
-function backToMenu(){
+async function backToMenu(){
+  // If online game in progress — confirm and save state
+  if(gameMode==='online' && G.history && G.history.length > 0 && !G.gameOver){
+    if(!confirm('Leave game? Your progress will be saved for 30 minutes.\nUse the same room code to rejoin and resume.')){
+      return;
+    }
+    const savedCode = onlineRoom;
+    await cleanupOnline(true);
+    if(savedCode){
+      setTimeout(()=>showResumeBanner(savedCode, 30), 300);
+    }
+  } else {
+    await cleanupOnline(false);
+    dismissResume();
+  }
   // Close all modals
   document.getElementById('gameover-modal').classList.remove('open');
   document.getElementById('promo-modal').classList.remove('open');
@@ -2512,16 +2659,15 @@ function backToMenu(){
   gameOverFired = false;
   pendingPromo = null;
   selected = null; legalMovesForSel = [];
-  cleanupOnline();
   document.getElementById('status-bar').textContent='';
   showScreen('menu-screen');
 }
-function rematch(){
+async function rematch(){
   gameOverFired = false;
   document.getElementById('gameover-modal').classList.remove('open');
   if(gameMode==='ai') startAI();
-  else if(gameMode==='local') confirmLocalStart(); // reuse existing names, skip dialog
-  else backToMenu();
+  else if(gameMode==='local') confirmLocalStart();
+  else await backToMenu(); // online: go to menu to create/join new room
 }
 </script>
 </body>
