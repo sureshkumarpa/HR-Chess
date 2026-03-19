@@ -173,6 +173,8 @@
   .local-name-row input:focus { outline:none; border-color:var(--accent); }
   .local-start-btn { width:100%; margin-top:8px; padding:11px; background:var(--accent); color:#1a0a00; border:none; border-radius:7px; cursor:pointer; font-family:'Playfair Display',serif; font-size:1.05rem; font-weight:600; transition:opacity 0.15s; }
   .local-start-btn:hover { opacity:0.88; }
+  .local-cancel-btn { width:100%; margin-top:8px; padding:9px; background:transparent; color:var(--text-muted); border:1px solid var(--panel-border); border-radius:7px; cursor:pointer; font-family:'Crimson Text',serif; font-size:1rem; transition:background 0.15s; }
+  .local-cancel-btn:hover { background:var(--btn); color:var(--text); }
 
   /* ===== GAME LAYOUT ===== */
   #game-screen { display: none; }
@@ -300,7 +302,7 @@
 </div>
 
 <!-- STATS MODAL -->
-<div id="stats-modal">
+<div id="stats-modal" onclick="handleStatsBackdrop(event)">
   <div class="stats-box">
     <div class="stats-header">
       <h2 id="stats-player-title">Your Stats</h2>
@@ -329,7 +331,7 @@
 </div>
 
 <!-- LOCAL 2P NAMES MODAL -->
-<div id="local-names-modal">
+<div id="local-names-modal" onclick="handleLocalModalBackdrop(event)">
   <div class="local-names-box">
     <h2>♔ vs ♚</h2>
     <p>Enter both players' names to begin</p>
@@ -342,6 +344,7 @@
       <input id="p2-name-input" type="text" maxlength="20" placeholder="Player 2 name..." />
     </div>
     <button class="local-start-btn" onclick="confirmLocalStart()">Start Game</button>
+    <button class="local-cancel-btn" onclick="cancelLocalStart()">✕ Cancel</button>
   </div>
 </div>
 
@@ -510,8 +513,27 @@ document.addEventListener('DOMContentLoaded', ()=>{
   document.getElementById('name-input').addEventListener('keydown', e=>{ if(e.key==='Enter') saveName(); });
   document.getElementById('p1-name-input').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('p2-name-input').focus(); });
   document.getElementById('p2-name-input').addEventListener('keydown', e=>{ if(e.key==='Enter') confirmLocalStart(); });
+  // Escape key closes any open modal
+  document.addEventListener('keydown', e=>{
+    if(e.key==='Escape'){
+      cancelLocalStart();
+      closeStats();
+    }
+  });
   loadPlayerName();
 });
+
+function cancelLocalStart(){
+  document.getElementById('local-names-modal').classList.remove('open');
+}
+
+function handleLocalModalBackdrop(e){
+  if(e.target === document.getElementById('local-names-modal')) cancelLocalStart();
+}
+
+function handleStatsBackdrop(e){
+  if(e.target === document.getElementById('stats-modal')) closeStats();
+}
 
 // ---- Game history (localStorage) ----
 function getHistory(){
@@ -1212,18 +1234,35 @@ function handleClick(r,f){
   if(gameMode==='online'&&G.turn!==myOnlineColor) return;
 
   const p=G.board[r][f];
+
   if(selected){
     const move=legalMovesForSel.find(m=>m.to[0]===r&&m.to[1]===f);
     if(move){
       executeMove(move,r,f);
       return;
     }
+    // Clicked same square — deselect
+    if(selected[0]===r&&selected[1]===f){
+      selected=null; legalMovesForSel=[];
+      renderBoard();
+      return;
+    }
+    // Clicked own piece — reselect it
+    if(p&&color(p)===G.turn){
+      selected=[r,f];
+      const allLegal=getLegalMoves(G.board,G.turn,G.castling,G.enPassant);
+      legalMovesForSel=allLegal.filter(m=>m.from[0]===r&&m.from[1]===f);
+      renderBoard();
+      return;
+    }
+    // Clicked empty or opponent square that's not a valid move — deselect
     selected=null; legalMovesForSel=[];
-  }
-  if(p&&color(p)===G.turn){
-    selected=[r,f];
-    const allLegal=getLegalMoves(G.board,G.turn,G.castling,G.enPassant);
-    legalMovesForSel=allLegal.filter(m=>m.from[0]===r&&m.from[1]===f);
+  } else {
+    if(p&&color(p)===G.turn){
+      selected=[r,f];
+      const allLegal=getLegalMoves(G.board,G.turn,G.castling,G.enPassant);
+      legalMovesForSel=allLegal.filter(m=>m.from[0]===r&&m.from[1]===f);
+    }
   }
   renderBoard();
 }
@@ -1396,6 +1435,8 @@ function loadPeerJS(cb){
 }
 
 function createRoom(){
+  // Clean up any existing connection first
+  if(peerInstance){try{peerInstance.destroy();}catch(e){} peerInstance=null; peerConn=null;}
   const code=Math.random().toString(36).substr(2,6).toUpperCase();
   document.getElementById('online-msg').textContent='Creating room '+code+'...';
   loadPeerJS(()=>{
@@ -1410,7 +1451,7 @@ function createRoom(){
         startOnlineGame();
       });
     });
-    peerInstance.on('error',e=>{
+    peerInstance.on('error',()=>{
       document.getElementById('online-msg').textContent='Connection error. Try again.';
     });
   });
@@ -1422,7 +1463,11 @@ function showJoinRoom(){
 
 function joinRoom(){
   const code=document.getElementById('join-code').value.trim().toUpperCase();
-  if(!code){return;}
+  if(code.length<4){
+    document.getElementById('online-msg').textContent='Please enter a valid room code.';
+    return;
+  }
+  if(peerInstance){try{peerInstance.destroy();}catch(e){} peerInstance=null; peerConn=null;}
   document.getElementById('online-msg').textContent='Joining room '+code+'...';
   loadPeerJS(()=>{
     peerInstance=new Peer();
@@ -1436,8 +1481,11 @@ function joinRoom(){
         conn.send(JSON.stringify({type:'joined'}));
       });
       conn.on('error',()=>{
-        document.getElementById('online-msg').textContent='Could not connect. Check code.';
+        document.getElementById('online-msg').textContent='Could not connect. Check the room code.';
       });
+    });
+    peerInstance.on('error',()=>{
+      document.getElementById('online-msg').textContent='Connection failed. Please try again.';
     });
   });
 }
@@ -1505,7 +1553,7 @@ function resign(){
   if(G.gameOver) return;
   if(!confirm('Resign?')) return;
   if(gameMode==='online'&&peerConn) peerConn.send(JSON.stringify({type:'resign'}));
-  // The resigning player is the one whose turn it is — opponent wins
+  // Resigning player loses — opponent wins
   const winner = G.turn==='w' ? 'Black' : 'White';
   showGameOver(winner+' Wins!','By resignation');
 }
@@ -1549,14 +1597,22 @@ function showGameOver(title, msg){
   }
 }
 function backToMenu(){
-  gameOverFired = false;
+  // Close all modals
   document.getElementById('gameover-modal').classList.remove('open');
+  document.getElementById('promo-modal').classList.remove('open');
+  document.getElementById('local-names-modal').classList.remove('open');
   document.getElementById('ai-options').classList.remove('open');
   document.getElementById('online-options').classList.remove('open');
+  // Reset state
+  gameOverFired = false;
+  pendingPromo = null;
+  selected = null; legalMovesForSel = [];
   if(peerInstance){try{peerInstance.destroy();}catch(e){} peerInstance=null; peerConn=null;}
+  document.getElementById('status-bar').textContent='';
   showScreen('menu-screen');
 }
 function rematch(){
+  gameOverFired = false;
   document.getElementById('gameover-modal').classList.remove('open');
   if(gameMode==='ai') startAI();
   else if(gameMode==='local') confirmLocalStart(); // reuse existing names, skip dialog
