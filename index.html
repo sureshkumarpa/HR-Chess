@@ -426,7 +426,11 @@
       <button class="diff-btn" onclick="showJoinRoom()">Join Room</button>
     </div>
     <div id="join-row" class="room-input" style="display:none">
-      <input id="join-code" type="text" maxlength="6" placeholder="Room code" />
+      <input id="join-code" type="text" maxlength="6" placeholder="Room code"
+        autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false"
+        style="text-transform:uppercase; letter-spacing:0.15em; font-weight:600;"
+        oninput="this.value=this.value.toUpperCase()"
+        onkeydown="if(event.key==='Enter') joinRoom()" />
       <button class="diff-btn" onclick="joinRoom()">Join</button>
     </div>
     <p class="room-msg" id="online-msg">Create a room and share the code with your friend.</p>
@@ -1480,19 +1484,29 @@ function createRoom(){
   const code=Math.random().toString(36).substr(2,6).toUpperCase();
   document.getElementById('online-msg').textContent='Creating room '+code+'...';
   loadPeerJS(()=>{
-    peerInstance=new Peer('chess-'+code);
-    peerInstance.on('open',()=>{
+    peerInstance=new Peer('chess-hr-'+code, {
+      config: {
+        iceServers:[
+          {urls:'stun:stun.l.google.com:19302'},
+          {urls:'stun:stun1.l.google.com:19302'},
+          {urls:'stun:stun2.l.google.com:19302'},
+          {urls:'stun:global.stun.twilio.com:3478'}
+        ]
+      }
+    });
+    peerInstance.on('open', id=>{
       onlineRoom=code;
       myOnlineColor='w';
-      document.getElementById('online-msg').textContent='Room created: '+code+' — Share this code!';
-      peerInstance.on('connection',conn=>{
+      document.getElementById('online-msg').textContent='✅ Room ready! Share code: '+code;
+      peerInstance.on('connection', conn=>{
         peerConn=conn;
         setupPeerConn();
         startOnlineGame();
       });
     });
-    peerInstance.on('error',()=>{
-      document.getElementById('online-msg').textContent='Connection error. Try again.';
+    peerInstance.on('error', err=>{
+      document.getElementById('online-msg').textContent='❌ Error: '+err.type+'. Try again.';
+      peerInstance=null;
     });
   });
 }
@@ -1508,24 +1522,46 @@ function joinRoom(){
     return;
   }
   if(peerInstance){try{peerInstance.destroy();}catch(e){} peerInstance=null; peerConn=null;}
-  document.getElementById('online-msg').textContent='Joining room '+code+'...';
+  document.getElementById('online-msg').textContent='Connecting to room '+code+'...';
   loadPeerJS(()=>{
-    peerInstance=new Peer();
-    peerInstance.on('open',()=>{
-      const conn=peerInstance.connect('chess-'+code);
+    peerInstance=new Peer({
+      config: {
+        iceServers:[
+          {urls:'stun:stun.l.google.com:19302'},
+          {urls:'stun:stun1.l.google.com:19302'},
+          {urls:'stun:stun2.l.google.com:19302'},
+          {urls:'stun:global.stun.twilio.com:3478'}
+        ]
+      }
+    });
+    peerInstance.on('open', ()=>{
+      document.getElementById('online-msg').textContent='Connecting to room '+code+'...';
+      const conn=peerInstance.connect('chess-hr-'+code, {reliable:true});
       peerConn=conn;
-      conn.on('open',()=>{
+      let connected=false;
+      conn.on('open', ()=>{
+        connected=true;
         onlineRoom=code;
         myOnlineColor='b';
         setupPeerConn();
         conn.send(JSON.stringify({type:'joined'}));
+        document.getElementById('online-msg').textContent='✅ Connected! Game starting...';
       });
-      conn.on('error',()=>{
-        document.getElementById('online-msg').textContent='Could not connect. Check the room code.';
+      conn.on('error', err=>{
+        document.getElementById('online-msg').textContent='❌ Could not connect. Check the room code.';
       });
+      // Timeout if no connection after 10s
+      setTimeout(()=>{
+        if(!connected){
+          document.getElementById('online-msg').textContent='❌ Timed out. Check code or ask host to recreate room.';
+          try{peerInstance.destroy();}catch(e){}
+          peerInstance=null; peerConn=null;
+        }
+      }, 10000);
     });
-    peerInstance.on('error',()=>{
-      document.getElementById('online-msg').textContent='Connection failed. Please try again.';
+    peerInstance.on('error', err=>{
+      document.getElementById('online-msg').textContent='❌ Error: '+err.type+'. Try again.';
+      peerInstance=null;
     });
   });
 }
