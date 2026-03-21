@@ -840,6 +840,22 @@
 </div>
 
 <script>
+// ===================== MODAL HELPERS =====================
+function openModal(id){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.style.display = 'flex';
+  el.style.visibility = 'visible';
+  el.classList.add('open');
+}
+function closeModal(id){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.classList.remove('open');
+  el.style.display = 'none';
+  el.style.visibility = 'hidden';
+}
+
 // ===================== PLAYER & HISTORY =====================
 let playerName = 'Guest';
 
@@ -853,7 +869,7 @@ function updateWelcome(){
   document.getElementById('name-input').value = playerName;
 }
 function openNameModal(){
-  document.getElementById('name-modal').classList.add('open');
+  openModal('name-modal');
   setTimeout(()=>document.getElementById('name-input').focus(),100);
 }
 function saveName(){
@@ -861,7 +877,7 @@ function saveName(){
   if(!v) return;
   playerName = v;
   localStorage.setItem('chess_player_name', playerName);
-  document.getElementById('name-modal').classList.remove('open');
+  closeModal('name-modal');
   updateWelcome();
 }
 document.addEventListener('DOMContentLoaded', ()=>{
@@ -894,7 +910,7 @@ window.addEventListener('beforeunload', ()=>{
 });
 
 function cancelLocalStart(){
-  document.getElementById('local-names-modal').classList.remove('open');
+  closeModal('local-names-modal');
 }
 
 function handleLocalModalBackdrop(e){
@@ -932,10 +948,10 @@ function clearHistory(period){
 
 function openStats(){
   renderStats();
-  document.getElementById('stats-modal').classList.add('open');
+  openModal('stats-modal');
 }
 function closeStats(){
-  document.getElementById('stats-modal').classList.remove('open');
+  closeModal('stats-modal');
 }
 
 function renderStats(){
@@ -1859,11 +1875,11 @@ function showPromoModal(c){
       ${pieceSVG(p.code)}
       <span class="promo-piece-label">${p.label}</span>
     </div>`).join('');
-  document.getElementById('promo-modal').classList.add('open');
+  openModal('promo-modal');
 }
 
 function completePromo(t){
-  document.getElementById('promo-modal').classList.remove('open');
+  closeModal('promo-modal');
   pendingPromo.promo=t;
   doMove(pendingPromo);
   if(gameMode==='online') sendOnlineMove(pendingPromo);
@@ -1945,14 +1961,14 @@ function startLocal(){
   // Pre-fill player 1 with the current playerName
   document.getElementById('p1-name-input').value = playerName;
   document.getElementById('p2-name-input').value = '';
-  document.getElementById('local-names-modal').classList.add('open');
+  openModal('local-names-modal');
   setTimeout(()=>document.getElementById('p2-name-input').focus(), 100);
 }
 
 function confirmLocalStart(){
   const p1 = document.getElementById('p1-name-input').value.trim() || 'Player 1';
   const p2 = document.getElementById('p2-name-input').value.trim() || 'Player 2';
-  document.getElementById('local-names-modal').classList.remove('open');
+  closeModal('local-names-modal');
   localP1Name = p1;
   localP2Name = p2;
   gameMode='local';
@@ -3360,13 +3376,13 @@ function showHandoverModal(fromName, forColor){
   document.getElementById('handover-title').textContent = '🎮 Control offered!';
   document.getElementById('handover-desc').textContent =
     fromName+' is offering you control of the '+( forColor==='w'?'White ♔':'Black ♚')+' pieces.';
-  document.getElementById('handover-modal').classList.add('open');
+  openModal('handover-modal');
   document.getElementById('handover-modal').style.visibility='visible';
   document.getElementById('handover-modal').style.display='flex';
 }
 
 function acceptHandover(){
-  document.getElementById('handover-modal').classList.remove('open');
+  closeModal('handover-modal');
   document.getElementById('handover-modal').style.display='none';
   if(!onlineRoom) return;
   fbRead('/rooms/'+onlineRoom+'/handover').then(h=>{
@@ -3386,7 +3402,7 @@ function acceptHandover(){
 }
 
 function declineHandover(){
-  document.getElementById('handover-modal').classList.remove('open');
+  closeModal('handover-modal');
   document.getElementById('handover-modal').style.display='none';
   if(!onlineRoom) return;
   fbRead('/rooms/'+onlineRoom+'/handover').then(h=>{
@@ -3501,9 +3517,11 @@ function showGameOver(title, msg){
   document.getElementById('go-msg').textContent = msg;
   // Build post-game contributor stats
   buildGameStats(title, msg);
-  document.getElementById('gameover-modal').classList.add('open');
-  document.getElementById('gameover-modal').style.display='flex';
-  document.getElementById('gameover-modal').style.visibility='visible';
+  // Open modal via class only — backToMenu/rematch will clear it properly
+  const gom = document.getElementById('gameover-modal');
+  gom.style.display = 'flex';
+  gom.style.visibility = 'visible';
+  gom.classList.add('open');
 
   const totalMoves = G.history.length;
   const isCheckmate = msg === 'Checkmate';
@@ -3549,10 +3567,15 @@ async function backToMenu(){
     await cleanupOnline(false);
     dismissResume();
   }
-  // Close all modals
-  document.getElementById('gameover-modal').classList.remove('open');
-  document.getElementById('promo-modal').classList.remove('open');
-  document.getElementById('local-names-modal').classList.remove('open');
+  // Close all modals — must clear BOTH class AND inline styles
+  ['gameover-modal','promo-modal','local-names-modal','handover-modal'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el){
+      el.classList.remove('open');
+      el.style.display = 'none';
+      el.style.visibility = 'hidden';
+    }
+  });
   document.getElementById('ai-options').classList.remove('open');
   document.getElementById('online-options').classList.remove('open');
   document.getElementById('create-room-row').style.display='none';
@@ -3567,12 +3590,18 @@ async function backToMenu(){
   document.getElementById('status-bar').textContent='';
   showScreen('menu-screen');
 }
+
 async function rematch(){
   gameOverFired = false;
-  document.getElementById('gameover-modal').classList.remove('open');
+  // Close gameover modal — clear both class AND inline styles
+  const gom = document.getElementById('gameover-modal');
+  gom.classList.remove('open');
+  gom.style.display = 'none';
+  gom.style.visibility = 'hidden';
+  document.getElementById('go-stats').style.display = 'none';
   if(gameMode==='ai') startAI();
   else if(gameMode==='local') confirmLocalStart();
-  else await backToMenu(); // online: go to menu to create/join new room
+  else await backToMenu();
 }
 </script>
 </body>
