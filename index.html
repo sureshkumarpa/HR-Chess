@@ -1859,7 +1859,7 @@ function handleClick(r,f){
   renderBoard();
 }
 
-function executeMove(move,toR,toF,fromOnline){
+async function executeMove(move,toR,toF,fromOnline){
   // Promotion?
   const p=G.board[move.from[0]][move.from[1]];
   if(type(p)==='P'&&(move.to[0]===0||move.to[0]===7)&&!move.promo){
@@ -1873,7 +1873,7 @@ function executeMove(move,toR,toF,fromOnline){
     }
   }
   doMove(move);
-  if(gameMode==='online'&&!fromOnline) sendOnlineMove(move);
+  if(gameMode==='online'&&!fromOnline) await sendOnlineMove(move);
 }
 
 function doMove(move){
@@ -1961,11 +1961,11 @@ function showPromoModal(c){
   openModal('promo-modal');
 }
 
-function completePromo(t){
+async function completePromo(t){
   closeModal('promo-modal');
   pendingPromo.promo=t;
   doMove(pendingPromo);
-  if(gameMode==='online') sendOnlineMove(pendingPromo);
+  if(gameMode==='online') await sendOnlineMove(pendingPromo);
   pendingPromo=null;
 }
 
@@ -2307,7 +2307,7 @@ async function fbDelete(path){
 async function cleanupOnline(saveState){
   if(fbPollInterval){ clearInterval(fbPollInterval); fbPollInterval=null; }
   if(saveState && onlineRoom && G.history && G.history.length > 0 && !G.gameOver){
-    await saveGameState();
+    await saveGameState(true); // true = mark as paused
   }
   if(onlineRoom){ onlineRoom=null; }
   await cleanupSpectator();
@@ -2316,7 +2316,7 @@ async function cleanupOnline(saveState){
 }
 
 // ---- Save & Resume ----
-async function saveGameState(){
+async function saveGameState(pauseGame=false){
   if(!onlineRoom) return;
   try {
     const state = {
@@ -2331,7 +2331,10 @@ async function saveGameState(){
       expiresAt: Date.now() + 30*60*1000
     };
     await fbWrite('/rooms/'+onlineRoom+'/gameState', state);
-    await fbWrite('/rooms/'+onlineRoom+'/status', 'paused');
+    // Only mark as paused when player explicitly leaves — NOT during normal play
+    if(pauseGame){
+      await fbWrite('/rooms/'+onlineRoom+'/status', 'paused');
+    }
   } catch(e){}
 }
 
@@ -2387,8 +2390,7 @@ function startBoardStateSaving(){
   boardSaveInterval = setInterval(async ()=>{
     if(!onlineRoom || gameMode !== 'online') return;
     try {
-      await saveGameState(); // reuse existing saveGameState but keep status as joined
-      await fbWrite('/rooms/'+onlineRoom+'/status', 'joined'); // don't mark as paused
+      await saveGameState(false); // false = do NOT mark as paused
     } catch(e){}
   }, 5000);
 }
@@ -2448,16 +2450,16 @@ async function createRoom(){
     savedHostColor = hostColor;
     setMsg('✅ Room ready! Share code: '+code+' — You play '+(hostColor==='w'?'White ♔':'Black ♚'));
     startOnlineGame();
-    fbPollInterval = setInterval(async ()=>{
+
+    // Poll ONLY for joiner — separate interval so it doesn't conflict with message polling
+    let waitInterval = setInterval(async ()=>{
       try {
         const room = await fbRead('/rooms/'+code);
-        if(!room){ return; }
+        if(!room) return;
         if(room.status === 'joined' || room.status === 'resumed'){
-          clearInterval(fbPollInterval); fbPollInterval=null;
-          fbLastMsgIndex = -1;
+          clearInterval(waitInterval); waitInterval = null;
           markOpponentConnected(room.guest || 'Opponent');
           startPollingMessages();
-          // Resume saved state if exists
           if(room.gameState && room.status === 'resumed'){
             await loadGameState(code, room);
           }
@@ -2534,7 +2536,6 @@ async function joinRoom(){
     onlineRoom = code;
     myOnlineColor = myColor;
     savedHostColor = room.hostColor || 'w';
-    fbLastMsgIndex = -1;
 
     if(resuming){
       setMsg('✅ Rejoined! Resuming game... You play '+(myColor==='w'?'White ♔':'Black ♚'));
@@ -2552,15 +2553,12 @@ async function joinRoom(){
       document.getElementById('name-white').textContent = opponentName;
     }
 
-    startPollingMessages();
-
     // Resume game state if available
     if(resuming){
       await loadGameState(code, room);
       await sendOnlineMessage({type:'resume'});
     }
 
-    // Dismiss resume banner if shown
     dismissResume();
 
   } catch(e){
@@ -2570,59 +2568,119 @@ async function joinRoom(){
 }
 
 function startPollingMessages(){
-  emojiLastIndex = -1;
+  if(fbPollInterval){ clearInterval(fbPollInterval); fbPollInterval=null; }
+
   startEmojiPolling();
+
+  let lastBoardKey = '';
+  let gameReadyShown = false;         // fire gameReady UI once only
+  let msgKeysProcessed = null;        // null = not yet initialised
+  let initDone = false;
+
+  // Step 1: read existing messages FIRST, mark them all as seen, THEN start polling
+  fbRead('/rooms/'+onlineRoom+'/messages').then(existingMsgs=>{
+    msgKeysProcessed = new Set(existingMsgs ? Object.keys(existingMsgs) : []);
+    initDone = true;
+  }).catch(()=>{
+    msgKeysProcessed = new Set();
+    initDone = true;
+  });
+
   fbPollInterval = setInterval(async ()=>{
     if(!onlineRoom) return;
-    // Check handover signals
-    await checkHandoverSignal();
-    // Update spectator count + show handover button if spectators present
+    // Wait until initial message snapshot is loaded
+    if(!initDone) return;
+
     try {
-      const specs = await fbRead('/rooms/'+onlineRoom+'/spectators');
-      const count = specs ? Object.keys(specs).length : 0;
-      const specEl = document.getElementById('spectator-count');
-      if(specEl) specEl.textContent = '👁 '+count+' watching';
-      const specInfoEl = document.getElementById('spectator-info');
-      if(specInfoEl) specInfoEl.style.display = count > 0 ? 'block' : 'none';
-      // Show handover button to players when spectators are present
-      const handoverCtrl = document.getElementById('handover-ctrl');
-      if(handoverCtrl && gameMode==='online' && !isSpectator){
-        handoverCtrl.style.display = count > 0 ? 'block' : 'none';
-      }
-      // Check spectator chat mute status
       const room = await fbRead('/rooms/'+onlineRoom);
-      if(room){
-        spectatorChatEnabled = room.spectatorChatEnabled !== false;
-        if(isSpectator) updateChatMuteUI();
+      if(!room) return;
+
+      // ── Game ready signal (joiner only, fires once) ──
+      if(!gameReadyShown && myOnlineColor !== savedHostColor && room.gameReady){
+        gameReadyShown = true;
+        document.getElementById('draw-btn').style.display = '';
+        document.getElementById('resign-btn').style.display = '';
+        document.getElementById('conn-dot').className = 'dot connected';
+        document.getElementById('conn-status').textContent = '🟢 Game started!';
+        const whiteName = document.getElementById('name-white').textContent;
+        document.getElementById('status-bar').textContent = whiteName + ' to move';
+        appendSystemMessage('🎮 Game has started! White moves first.');
+        if(!document.getElementById('voice-bar').classList.contains('visible')) initVoice();
+        startBoardStateSaving();
       }
-    } catch(e){}
-    try {
-      const msgs = await fbRead('/rooms/'+onlineRoom+'/messages');
-      if(!msgs) return;
-      const keys = Object.keys(msgs).sort();
-      for(let i = fbLastMsgIndex+1; i < keys.length; i++){
-        const msg = msgs[keys[i]];
-        if(msg.from === myOnlineColor){ fbLastMsgIndex = i; continue; }
-        await handleOnlineMessage(msg);
-        fbLastMsgIndex = i;
+
+      // ── Spectator count ──
+      const specs = room.spectators ? Object.keys(room.spectators).length : 0;
+      const specEl = document.getElementById('spectator-count');
+      if(specEl) specEl.textContent = '👁 '+specs+' watching';
+      const specInfoEl = document.getElementById('spectator-info');
+      if(specInfoEl) specInfoEl.style.display = specs > 0 ? 'block' : 'none';
+      const handoverCtrl = document.getElementById('handover-ctrl');
+      if(handoverCtrl && gameMode==='online' && !isSpectator)
+        handoverCtrl.style.display = specs > 0 ? 'block' : 'none';
+
+      // ── Spectator chat mute ──
+      spectatorChatEnabled = room.spectatorChatEnabled !== false;
+      if(isSpectator) updateChatMuteUI();
+
+      // ── Process NEW messages from opponent only ──
+      const msgs = room.messages;
+      if(msgs){
+        const keys = Object.keys(msgs).sort();
+        for(const key of keys){
+          if(msgKeysProcessed.has(key)) continue;
+          msgKeysProcessed.add(key);
+          const msg = msgs[key];
+          if(msg.from !== myOnlineColor){
+            await handleOnlineMessage(msg);
+          }
+        }
       }
-    } catch(e){}
-  }, 800);
+
+      // ── Board fallback sync ──
+      // Only sync when it is NOT my turn (opponent should have moved)
+      // and the game is active (not waiting, not over)
+      if(!G.gameOver && room.gameState && G.turn !== myOnlineColor){
+        const s = room.gameState;
+        if(s.board && s.turn){
+          const remoteKey = s.board.map(r=>r.map(p=>p||'.').join('')).join('|') + s.turn;
+          const localKey  = G.board.map(r=>r.map(p=>p||'.').join('')).join('|') + G.turn;
+          if(remoteKey !== localKey && remoteKey !== lastBoardKey){
+            // Opponent moved — we missed the message — sync from state
+            G.board     = s.board;
+            G.turn      = s.turn;
+            G.castling  = s.castling  || G.castling;
+            G.enPassant = s.enPassant || null;
+            G.history   = s.history   || G.history;
+            G.captured  = s.captured  || G.captured;
+            lastBoardKey = remoteKey;
+            renderBoard();
+            updateMoveHistory();
+            updateStatus();
+          }
+        }
+      }
+
+      // ── Handover signals ──
+      await checkHandoverSignal();
+
+    } catch(e){ /* silent — network blip */ }
+  }, 1000);
 }
 
 async function handleOnlineMessage(msg){
   if(msg.type==='move'){
-    executeMove(msg.move, msg.move.to[0], msg.move.to[1], true);
+    await executeMove(msg.move, msg.move.to[0], msg.move.to[1], true);
   } else if(msg.type==='draw-offer'){
     if(confirm('Opponent offers a draw. Accept?')){
       endDraw();
-      sendOnlineMessage({type:'draw-accept'});
+      await sendOnlineMessage({type:'draw-accept'});
     }
-  } else if(msg.type==='draw-accept'){ endDraw(); }
-  else if(msg.type==='resign'){
+  } else if(msg.type==='draw-accept'){
+    endDraw();
+  } else if(msg.type==='resign'){
     showGameOver(myOnlineColor==='w'?'White Wins!':'Black Wins!','Opponent resigned');
   } else if(msg.type==='resume'){
-    // Opponent rejoined and resumed — load saved state
     const room = await fbRead('/rooms/'+onlineRoom);
     if(room && room.gameState){
       await loadGameState(onlineRoom, room);
@@ -2631,16 +2689,13 @@ async function handleOnlineMessage(msg){
   } else if(msg.type==='disconnected'){
     document.getElementById('conn-dot').className='dot';
     document.getElementById('conn-status').textContent='Opponent left — game paused';
-    appendSystemMessage('⏸ Opponent disconnected. Game paused — they can rejoin with code: '+onlineRoom+' within 30 min.');
+    appendSystemMessage('⏸ Opponent left. They can rejoin with code: '+onlineRoom+' (30 min window).');
   } else if(msg.type==='swap-request'){
-    // Opponent wants to swap — ask this player
-    const swapMsg = document.getElementById('swap-msg');
-    swapMsg.textContent='Opponent wants to swap colors!';
+    document.getElementById('swap-msg').textContent='Opponent wants to swap colors!';
     document.getElementById('swap-btn').textContent='✅ Accept Swap';
     document.getElementById('swap-btn').onclick = acceptSwap;
     document.getElementById('swap-btn').style.display='block';
   } else if(msg.type==='swap-accept'){
-    // Other player accepted — swap our color
     applyColorSwap();
     document.getElementById('swap-msg').textContent='Colors swapped!';
     document.getElementById('swap-btn').style.display='none';
@@ -2660,8 +2715,13 @@ async function sendOnlineMessage(msg){
   } catch(e){}
 }
 
-function sendOnlineMove(move){
-  sendOnlineMessage({type:'move', move});
+async function sendOnlineMove(move){
+  // Send move message to opponent
+  await sendOnlineMessage({type:'move', move});
+  // Also save full board state — fallback in case opponent misses the message
+  if(onlineRoom){
+    try { await saveGameState(); } catch(e){}
+  }
 }
 
 function requestSwap(){
@@ -2718,7 +2778,7 @@ function startOnlineGame(){
   newGame();
   G.mode='online'; G.myColor=myOnlineColor;
 
-  // White bar = bottom, Black bar = top
+  // Name bars — white at bottom, black at top
   if(myOnlineColor==='w'){
     document.getElementById('name-white').textContent = playerName;
     document.getElementById('name-black').textContent = 'Opponent';
@@ -2737,7 +2797,10 @@ function startOnlineGame(){
   document.getElementById('swap-btn').onclick = requestSwap;
   historyStack=[]; lastMove=null; selected=null; legalMovesForSel=[];
 
-  // Show color label
+  // Hide Draw/Resign until both players are connected
+  document.getElementById('draw-btn').style.display = 'none';
+  document.getElementById('resign-btn').style.display = 'none';
+
   updateColorLabel();
 
   isSpectator = false;
@@ -2748,23 +2811,27 @@ function startOnlineGame(){
   document.getElementById('color-info').style.display = 'block';
 
   if(myOnlineColor === 'w'){
+    // Host waiting for opponent — block moves
+    G.gameOver = true;
     document.getElementById('conn-dot').className = 'dot waiting';
-    document.getElementById('conn-status').textContent = 'Waiting for opponent...';
-    G.gameOver = true; // block ALL moves until opponent joins - host goes first as white
+    document.getElementById('conn-status').textContent = 'Waiting for opponent to join...';
+    document.getElementById('status-bar').textContent = '⏳ Waiting for opponent...';
   } else {
-    // Joiner plays black - white (host) moves first, so joiner is also blocked initially
-    // but we DON'T set gameOver=true because that would confuse the state
+    // Joiner — connected, waiting for host to see join
+    G.gameOver = false;
     document.getElementById('conn-dot').className = 'dot connected';
-    document.getElementById('conn-status').textContent = '✅ Connected! White moves first.';
-    // Show swap button for joiner immediately
+    document.getElementById('conn-status').textContent = '✅ Joined! Host will start soon...';
+    document.getElementById('status-bar').textContent = '⏳ Connecting...';
+    // Show swap button for joiner
     document.getElementById('swap-btn').style.display = 'block';
-    // Enable voice for joiner right away
+    // Start polling immediately for joiner
+    startPollingMessages();
+    // Start voice for joiner
     initVoice();
   }
 
   showScreen('game-screen');
   buildBoard();
-  // Initialize chat for online mode
   initChat();
 }
 
@@ -2772,7 +2839,10 @@ function markOpponentConnected(opponentName){
   G.gameOver = false;
   gameOverFired = false;
   document.getElementById('conn-dot').className = 'dot connected';
-  document.getElementById('conn-status').textContent = 'Opponent connected!';
+  document.getElementById('conn-status').textContent = '🟢 Opponent connected!';
+  // Show Draw/Resign now that both players are in
+  document.getElementById('draw-btn').style.display = '';
+  document.getElementById('resign-btn').style.display = '';
   document.getElementById('swap-btn').style.display = 'block';
   if(opponentName){
     if(myOnlineColor==='w'){
@@ -2783,21 +2853,21 @@ function markOpponentConnected(opponentName){
   }
   const whitePlayerName = document.getElementById('name-white').textContent;
   document.getElementById('status-bar').textContent = whitePlayerName + ' to move';
-  // System chat message
-  appendSystemMessage((opponentName||'Opponent') + ' joined — game begins!');
-  // Enable voice chat now that both players are connected
+  appendSystemMessage('🎮 ' + (opponentName||'Opponent') + ' joined — game begins! White moves first.');
   initVoice();
-  // Show spectator count + host chat control (only for host/white)
   document.getElementById('spectator-info').style.display = 'block';
   if(myOnlineColor === savedHostColor){
     document.getElementById('chat-mute-ctrl').style.display = 'block';
   }
-  // Start emoji polling for reactions
   emojiLastIndex = -1;
   startEmojiPolling();
-  // Save board state every 5 seconds for spectators to follow
   startBoardStateSaving();
+  // Write a game-ready flag so joiner's poll knows host confirmed
+  if(onlineRoom){
+    fbWrite('/rooms/'+onlineRoom+'/gameReady', true).catch(()=>{});
+  }
   renderBoard();
+  updateStatus();
 }
 
 function copyCode(){
