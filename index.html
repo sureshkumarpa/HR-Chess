@@ -1773,16 +1773,21 @@ function updateStatus(){
 
   // ---- 50-move rule ----
   // (optional but good practice — skip for now, already handled by repetition)
-  // Resolve display name for current and opponent turn
-  const curName  = G.turn==='w' ? document.getElementById('name-white').textContent : document.getElementById('name-black').textContent;
-  const oppTurn  = opp(G.turn);
-  const oppName  = oppTurn==='w' ? document.getElementById('name-white').textContent : document.getElementById('name-black').textContent;
+  // Resolve display name — strip waiting placeholder if present
+  const rawCurName = G.turn==='w'
+    ? document.getElementById('name-white').textContent
+    : document.getElementById('name-black').textContent;
+  const rawOppName = opp(G.turn)==='w'
+    ? document.getElementById('name-white').textContent
+    : document.getElementById('name-black').textContent;
+  const curName = rawCurName.includes('Waiting') ? (G.turn==='w'?'White':'Black') : rawCurName;
+  const oppName = rawOppName.includes('Waiting') ? (G.turn==='w'?'Black':'White') : rawOppName;
   let msg='';
   if(!lm.length){
     G.gameOver=true;
     if(inC){
       msg = oppName + ' wins by checkmate!';
-      setTimeout(()=>showGameOver(oppTurn==='w'?'White Wins!':'Black Wins!','Checkmate'),300);
+      setTimeout(()=>showGameOver(opp(G.turn)==='w'?'White Wins!':'Black Wins!','Checkmate'),300);
     } else {
       msg = 'Stalemate — Draw!';
       setTimeout(()=>showGameOver('Draw','Stalemate'),300);
@@ -2548,12 +2553,17 @@ async function joinRoom(){
 
     startOnlineGame();
 
-    // Set opponent name on their bar
+    // Immediately set opponent's real name (we know it from Firebase)
     const opponentName = isHost ? guestName : hostName;
     if(myColor==='w'){
       document.getElementById('name-black').textContent = opponentName;
     } else {
       document.getElementById('name-white').textContent = opponentName;
+    }
+
+    // Fix status bar — now we have real names
+    if(!resuming){
+      document.getElementById('status-bar').textContent = '⏳ Waiting for host to confirm...';
     }
 
     // Resume game state if available
@@ -2603,10 +2613,13 @@ function startPollingMessages(){
         gameReadyShown = true;
         document.getElementById('draw-btn').style.display = '';
         document.getElementById('resign-btn').style.display = '';
+        document.getElementById('swap-btn').style.display = 'block';
         document.getElementById('conn-dot').className = 'dot connected';
         document.getElementById('conn-status').textContent = '🟢 Game started!';
+        // Use real name from name bar (was set in joinRoom)
         const whiteName = document.getElementById('name-white').textContent;
-        document.getElementById('status-bar').textContent = whiteName + ' to move';
+        const statusText = whiteName.includes('Waiting') ? 'White to move' : whiteName + ' to move';
+        document.getElementById('status-bar').textContent = statusText;
         appendSystemMessage('🎮 Game has started! White moves first.');
         if(!document.getElementById('voice-bar').classList.contains('visible')) initVoice();
         startBoardStateSaving();
@@ -2821,13 +2834,14 @@ function startOnlineGame(){
     document.getElementById('conn-status').textContent = 'Waiting for opponent to join...';
     document.getElementById('status-bar').textContent = '⏳ Waiting for opponent...';
   } else {
-    // Joiner — connected, waiting for host to see join
+    // Joiner — wait for host to confirm via gameReady signal
     G.gameOver = false;
     document.getElementById('conn-dot').className = 'dot connected';
-    document.getElementById('conn-status').textContent = '✅ Joined! Host will start soon...';
-    document.getElementById('status-bar').textContent = '⏳ Connecting...';
-    // Show swap button for joiner
-    document.getElementById('swap-btn').style.display = 'block';
+    document.getElementById('conn-status').textContent = '✅ Joined! Waiting for host...';
+    document.getElementById('status-bar').textContent = '⏳ Waiting for host to confirm...';
+    // Keep draw/resign hidden until gameReady signal received
+    // Swap button also hidden — shown only after gameReady
+    document.getElementById('swap-btn').style.display = 'none';
     // Start polling immediately for joiner
     startPollingMessages();
     // Start voice for joiner
@@ -2848,6 +2862,8 @@ function markOpponentConnected(opponentName){
   document.getElementById('draw-btn').style.display = '';
   document.getElementById('resign-btn').style.display = '';
   document.getElementById('swap-btn').style.display = 'block';
+
+  // Replace the ⏳ Waiting... placeholder with real opponent name
   if(opponentName){
     if(myOnlineColor==='w'){
       document.getElementById('name-black').textContent = opponentName;
@@ -2855,8 +2871,12 @@ function markOpponentConnected(opponentName){
       document.getElementById('name-white').textContent = opponentName;
     }
   }
-  const whitePlayerName = document.getElementById('name-white').textContent;
-  document.getElementById('status-bar').textContent = whitePlayerName + ' to move';
+
+  // Fix status bar — white always moves first
+  const whiteName = document.getElementById('name-white').textContent;
+  const cleanWhiteName = whiteName.includes('Waiting') ? 'White' : whiteName;
+  document.getElementById('status-bar').textContent = cleanWhiteName + ' to move';
+
   appendSystemMessage('🎮 ' + (opponentName||'Opponent') + ' joined — game begins! White moves first.');
   initVoice();
   document.getElementById('spectator-info').style.display = 'block';
@@ -2866,7 +2886,7 @@ function markOpponentConnected(opponentName){
   emojiLastIndex = -1;
   startEmojiPolling();
   startBoardStateSaving();
-  // Write a game-ready flag so joiner's poll knows host confirmed
+  // Write gameReady flag for joiner's poll
   if(onlineRoom){
     fbWrite('/rooms/'+onlineRoom+'/gameReady', true).catch(()=>{});
   }
