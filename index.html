@@ -1753,8 +1753,8 @@ function updatePlayerBars(){
 }
 
 function updateStatus(){
-  // Show waiting message if online opponent not connected yet
-  if(gameMode==='online' && document.getElementById('conn-dot').className!=='dot connected'){
+  // Host waiting for opponent — show waiting message
+  if(gameMode==='online' && G.gameOver && G.history.length===0){
     document.getElementById('status-bar').textContent='⏳ Waiting for opponent to join...';
     return;
   }
@@ -1822,8 +1822,8 @@ function handleClick(r,f){
   if(gameMode==='spectator') return; // spectators cannot move pieces
   if(gameMode==='ai'&&G.turn!==playerColor) return;
   if(gameMode==='online'&&G.turn!==myOnlineColor) return;
-  // Block all moves until opponent is connected (dot is green)
-  if(gameMode==='online'&&document.getElementById('conn-dot').className!=='dot connected') return;
+  // Block all moves until opponent is connected (host has G.gameOver=true while waiting)
+  if(gameMode==='online' && G.gameOver) return;
 
   const p=G.board[r][f];
 
@@ -2192,9 +2192,12 @@ function startSpectatorPolling(){
           G.captured = s.captured || {w:[],b:[]};
           renderBoard();
           updateMoveHistory();
-          // Update player names
-          if(room.host) document.getElementById('name-white').textContent = room.host;
-          if(room.guest) document.getElementById('name-black').textContent = room.guest;
+          // Update player names for SPECTATORS only
+          // (players set their own names in startOnlineGame)
+          if(isSpectator){
+            if(room.host) document.getElementById(savedHostColor==='w'?'name-white':'name-black').textContent = room.host;
+            if(room.guest) document.getElementById(savedHostColor==='w'?'name-black':'name-white').textContent = room.guest;
+          }
         }
       }
     } catch(e){}
@@ -2778,13 +2781,14 @@ function startOnlineGame(){
   newGame();
   G.mode='online'; G.myColor=myOnlineColor;
 
-  // Name bars — white at bottom, black at top
+  // Name bars — white ALWAYS at bottom, black ALWAYS at top
+  // My name goes on MY color bar, "Opponent" placeholder on theirs
   if(myOnlineColor==='w'){
-    document.getElementById('name-white').textContent = playerName;
-    document.getElementById('name-black').textContent = 'Opponent';
+    document.getElementById('name-white').textContent = playerName;   // me = bottom
+    document.getElementById('name-black').textContent = '⏳ Waiting...'; // them = top
   } else {
-    document.getElementById('name-white').textContent = 'Opponent';
-    document.getElementById('name-black').textContent = playerName;
+    document.getElementById('name-white').textContent = '⏳ Waiting...'; // them = bottom
+    document.getElementById('name-black').textContent = playerName;   // me = top
   }
 
   document.getElementById('game-title').textContent = 'Online Game';
