@@ -365,7 +365,47 @@
   }
   @keyframes voicepulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.7)} }
 
-  /* ===== CAPTURE ANIMATION ===== */
+  /* ===== SPECTATOR MODE ===== */
+  #spectator-banner {
+    position:fixed; top:0; left:0; right:0; z-index:500;
+    background:linear-gradient(90deg,#1a0a00,#3a1a00,#1a0a00);
+    border-bottom:2px solid var(--accent);
+    padding:6px 16px; display:none; align-items:center; justify-content:center; gap:12px;
+    font-family:'Playfair Display',serif; font-size:0.9rem; color:var(--accent);
+  }
+  #spectator-banner.show { display:flex; }
+  .spec-badge {
+    background:var(--accent); color:#1a0a00; border-radius:4px;
+    padding:2px 8px; font-size:0.75rem; font-weight:700; letter-spacing:0.05em;
+  }
+  #spec-chat-muted-msg {
+    display:none; text-align:center; font-size:0.78rem;
+    color:#cf6060; font-style:italic; padding:4px;
+  }
+
+  /* ===== EMOJI REACTIONS ===== */
+  .emoji-bar {
+    display:none; gap:6px; justify-content:center; flex-wrap:wrap;
+    padding:6px 0; border-top:1px solid var(--panel-border); margin-top:4px;
+  }
+  .emoji-bar.show { display:flex; }
+  .emoji-btn {
+    font-size:1.3rem; background:none; border:1px solid var(--panel-border);
+    border-radius:8px; padding:4px 8px; cursor:pointer;
+    transition:transform 0.1s, background 0.1s;
+  }
+  .emoji-btn:hover { transform:scale(1.3); background:rgba(212,168,67,0.1); }
+  .floating-emoji {
+    position:fixed; z-index:9999; pointer-events:none;
+    font-size:2.2rem; animation:floatUp 2.5s ease-out forwards;
+    user-select:none;
+  }
+  @keyframes floatUp {
+    0%   { transform:translateY(0)   scale(0.5); opacity:0; }
+    15%  { transform:translateY(-20px) scale(1.4); opacity:1; }
+    70%  { transform:translateY(-180px) scale(1); opacity:1; }
+    100% { transform:translateY(-280px) scale(0.8); opacity:0; }
+  }
   .capture-fly {
     position: fixed; z-index: 9999; pointer-events: none;
     width: 44px; height: 44px;
@@ -439,6 +479,17 @@
 
   /* ===== GAME OVER MODAL ===== */
   #gameover-modal.open { display: flex !important; visibility: visible !important; }
+  #handover-modal.open { display: flex !important; visibility: visible !important; }
+  .go-stat-bar { margin:6px 0; }
+  .go-stat-label { display:flex; justify-content:space-between; font-size:0.8rem; color:var(--text-muted); margin-bottom:3px; }
+  .go-stat-track { background:var(--captured-bg); border-radius:4px; height:10px; overflow:hidden; }
+  .go-stat-fill { height:100%; border-radius:4px; transition:width 0.8s ease; }
+  .go-stat-fill.white { background:linear-gradient(90deg,#d4a843,#fff8dc); }
+  .go-stat-fill.black { background:linear-gradient(90deg,#8b5e3c,#3a1a00); }
+  .go-contributors { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; justify-content:center; }
+  .go-contributor { background:var(--captured-bg); border-radius:8px; padding:6px 10px; text-align:center; font-size:0.78rem; border:1px solid var(--panel-border); }
+  .go-contributor .contrib-name { color:var(--accent); font-family:'Playfair Display',serif; font-size:0.8rem; }
+  .go-contributor .contrib-pct { font-size:1.1rem; font-weight:700; color:var(--text); }
   .gameover-box { background: var(--panel); border: 2px solid var(--accent); border-radius: 12px; padding: 32px 40px; text-align: center; max-width: 340px; }
   .gameover-box h2 { font-family: 'Playfair Display', serif; color: var(--accent); font-size: 1.8rem; margin-bottom: 8px; }
   .gameover-box p { color: var(--text-muted); margin-bottom: 20px; font-size: 1.1rem; }
@@ -575,6 +626,7 @@
     <div class="online-btns">
       <button class="diff-btn" onclick="showCreateRoom()">Create Room</button>
       <button class="diff-btn" onclick="showJoinRoom()">Join Room</button>
+      <button class="diff-btn" onclick="showWatchRoom()">👁 Watch</button>
     </div>
 
     <!-- Create Room color picker (hidden until Create Room clicked) -->
@@ -598,6 +650,15 @@
         oninput="this.value=this.value.toUpperCase()"
         onkeydown="if(event.key==='Enter') joinRoom()" />
       <button class="diff-btn" onclick="joinRoom()">Join</button>
+    </div>
+
+    <div id="watch-row" class="room-input" style="display:none">
+      <input id="watch-code" type="text" maxlength="6" placeholder="Room code to watch"
+        autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false"
+        style="text-transform:uppercase; letter-spacing:0.15em; font-weight:600;"
+        oninput="this.value=this.value.toUpperCase()"
+        onkeydown="if(event.key==='Enter') watchRoom()" />
+      <button class="diff-btn" onclick="watchRoom()">👁 Watch</button>
     </div>
     <p class="room-msg" id="online-msg">Create a room and share the code with your friend.</p>
   </div>
@@ -662,6 +723,27 @@
         </button>
         <div id="swap-msg" style="font-size:0.8rem; color:var(--accent); text-align:center; min-height:16px; margin-top:4px;"></div>
         <div class="online-status" style="margin-top:6px;"><span class="dot waiting" id="conn-dot"></span><span id="conn-status">Waiting for opponent...</span></div>
+        <!-- Spectator info -->
+        <div id="spectator-info" style="display:none; margin-top:6px; font-size:0.8rem; color:var(--text-muted); text-align:center;">
+          <span id="spectator-count">👁 0 watching</span>
+        </div>
+        <!-- Host chat control (only shown to host) -->
+        <div id="chat-mute-ctrl" style="display:none; margin-top:6px;">
+          <button id="chat-mute-btn" onclick="toggleSpectatorChat()"
+            style="width:100%;padding:5px;border:1px solid var(--panel-border);background:var(--btn);
+            color:var(--text);border-radius:5px;cursor:pointer;font-family:'Crimson Text',serif;font-size:0.82rem;">
+            🔊 Spectator chat: ON
+          </button>
+        </div>
+        <!-- Control handover (shown to players when spectators exist) -->
+        <div id="handover-ctrl" style="display:none; margin-top:6px;">
+          <button id="handover-btn" onclick="showHandoverPicker()"
+            style="width:100%;padding:5px;border:1px solid var(--panel-border);background:var(--btn);
+            color:var(--text);border-radius:5px;cursor:pointer;font-family:'Crimson Text',serif;font-size:0.82rem;">
+            🎮 Hand Over Control
+          </button>
+          <div id="handover-status" style="font-size:0.75rem;color:var(--accent);text-align:center;margin-top:3px;min-height:14px;"></div>
+        </div>
 
         <!-- Voice chat bar -->
         <div id="voice-bar">
@@ -694,10 +776,29 @@
             <button class="chat-mic-btn" id="chat-mic-btn" onclick="toggleVoiceMsg()" title="Hold to record voice message">🎤</button>
             <button class="chat-send-btn" onclick="sendChat()">➤</button>
           </div>
+          <p id="spec-chat-muted-msg">💬 Chat muted by host</p>
+          <!-- Emoji reaction bar -->
+          <div class="emoji-bar" id="emoji-bar">
+            <button class="emoji-btn" onclick="sendEmoji('👏')" title="Clap">👏</button>
+            <button class="emoji-btn" onclick="sendEmoji('👍')" title="Thumbs up">👍</button>
+            <button class="emoji-btn" onclick="sendEmoji('🌸')" title="Flower">🌸</button>
+            <button class="emoji-btn" onclick="sendEmoji('❤️')" title="Heart">❤️</button>
+            <button class="emoji-btn" onclick="sendEmoji('😂')" title="Laugh">😂</button>
+            <button class="emoji-btn" onclick="sendEmoji('🔥')" title="Fire">🔥</button>
+            <button class="emoji-btn" onclick="sendEmoji('😮')" title="Wow">😮</button>
+            <button class="emoji-btn" onclick="sendEmoji('🎉')" title="Party">🎉</button>
+          </div>
         </div>
       </div>
     </div>
   </div>
+</div>
+
+<!-- Spectator banner (shown to spectators at top) -->
+<div id="spectator-banner">
+  <span class="spec-badge">👁 WATCHING</span>
+  <span id="spec-players-label">Loading game...</span>
+  <span id="spec-count-label" style="color:var(--text-muted);font-size:0.8rem;"></span>
 </div>
 
 <!-- Promotion modal -->
@@ -709,13 +810,31 @@
 </div>
 
 <!-- Game over modal -->
-<div id="gameover-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); align-items:center; justify-content:center; z-index:200; visibility:hidden;">
+<div id="gameover-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); align-items:center; justify-content:center; z-index:200; visibility:hidden;">
   <div class="gameover-box">
     <h2 id="go-title">Game Over</h2>
     <p id="go-msg">Checkmate!</p>
+    <!-- Post-game stats -->
+    <div id="go-stats" style="margin:12px 0; display:none;">
+      <div style="font-family:'Playfair Display',serif; color:var(--accent); font-size:0.85rem; margin-bottom:8px;">Game Contributions</div>
+      <div id="go-stats-content"></div>
+    </div>
     <div class="gameover-btns">
       <button class="go-btn" onclick="backToMenu()">Menu</button>
       <button class="go-btn primary" onclick="rematch()">Rematch</button>
+    </div>
+  </div>
+</div>
+
+<!-- Control Handover Modal (shown to spectators when offered control) -->
+<div id="handover-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); align-items:center; justify-content:center; z-index:300; visibility:hidden;">
+  <div style="background:var(--panel); border:2px solid var(--accent); border-radius:14px; padding:24px 28px; text-align:center; max-width:320px;">
+    <div style="font-size:2rem; margin-bottom:8px;">🎮</div>
+    <h3 style="font-family:'Playfair Display',serif; color:var(--accent); margin-bottom:8px;" id="handover-title">Control offered!</h3>
+    <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom:16px;" id="handover-desc">You have been offered control of the White pieces.</p>
+    <div style="display:flex; gap:10px; justify-content:center;">
+      <button onclick="acceptHandover()" style="padding:8px 20px; background:#2d5a2d; color:#a8e6a8; border:1px solid #4caf50; border-radius:8px; cursor:pointer; font-family:'Crimson Text',serif; font-size:1rem;">✅ Accept</button>
+      <button onclick="declineHandover()" style="padding:8px 18px; background:var(--btn); color:var(--text); border:1px solid var(--panel-border); border-radius:8px; cursor:pointer; font-family:'Crimson Text',serif; font-size:1rem;">❌ Decline</button>
     </div>
   </div>
 </div>
@@ -1100,6 +1219,7 @@ function newGame(){
     myColor: myOnlineColor
   };
   G.posHistory.push(boardKey());
+  moveContributors = { w:{}, b:{} };
 }
 
 function boardKey(){
@@ -1600,6 +1720,7 @@ function handleClick(r,f){
     }
     return;
   }
+  if(gameMode==='spectator') return; // spectators cannot move pieces
   if(gameMode==='ai'&&G.turn!==playerColor) return;
   if(gameMode==='online'&&G.turn!==myOnlineColor) return;
   // Block all moves until opponent is connected (dot is green)
@@ -1684,6 +1805,19 @@ function doMove(move){
     }, 50);
   }
   G.history.push(notation);
+  // Track contributor for post-game stats
+  let contributor;
+  if(isDelegate && capturingColor === (delegateFor||myOnlineColor)){
+    contributor = playerName; // spectator playing on behalf
+  } else if(gameMode==='online'){
+    contributor = capturingColor===myOnlineColor ? playerName : (document.getElementById(capturingColor==='w'?'name-white':'name-black').textContent);
+  } else if(gameMode==='ai'){
+    contributor = capturingColor===playerColor ? playerName : 'Computer';
+  } else {
+    contributor = capturingColor==='w' ? localP1Name : localP2Name;
+  }
+  if(!moveContributors[capturingColor]) moveContributors[capturingColor]={};
+  moveContributors[capturingColor][contributor] = (moveContributors[capturingColor][contributor]||0)+1;
   G.turn=opp(G.turn);
   lastMove=move;
   selected=null; legalMovesForSel=[];
@@ -1839,6 +1973,206 @@ const FB_URL = 'https://harish-rahav-default-rtdb.asia-southeast1.firebasedataba
 let onlineRoom = null, myOnlineColor = 'w';
 let fbPollInterval = null, fbLastMsgIndex = -1, fbRoomRef = null;
 
+// ===================== SPECTATOR MODE =====================
+let isSpectator = false;
+let spectatorPollInterval = null;
+let spectatorChatEnabled = true; // host controls this
+let spectatorId = 'spec_' + Math.random().toString(36).substr(2,8);
+
+function showWatchRoom(){
+  document.getElementById('watch-row').style.display='flex';
+  document.getElementById('join-row').style.display='none';
+  document.getElementById('create-room-row').style.display='none';
+}
+
+async function watchRoom(){
+  const code = document.getElementById('watch-code').value.trim().toUpperCase();
+  if(code.length < 4){ setMsg('Please enter a valid room code.'); return; }
+  setMsg('Connecting as spectator...');
+  try {
+    const room = await fbRead('/rooms/'+code);
+    if(!room){ setMsg('❌ Room not found.'); return; }
+    if(room.expiresAt && Date.now() > room.expiresAt){ setMsg('❌ Room has expired.'); return; }
+
+    isSpectator = true;
+    onlineRoom = code;
+    myOnlineColor = 'spectator';
+
+    // Register as spectator in Firebase
+    await fbWrite('/rooms/'+code+'/spectators/'+spectatorId, {
+      name: playerName, joinedAt: Date.now()
+    });
+
+    setMsg('✅ Watching game...');
+    startSpectatorMode(room);
+
+  } catch(e){ setMsg('❌ Connection error. Try again.'); }
+}
+
+function startSpectatorMode(room){
+  gameMode = 'spectator';
+  // Show game screen in read-only mode
+  newGame();
+  playerColor = 'w'; // view from white side by default
+  document.getElementById('game-title').textContent = '👁 Watching';
+  document.getElementById('online-side').style.display = 'block';
+  document.getElementById('room-code-display').textContent = onlineRoom;
+  document.getElementById('undo-btn').style.display = 'none';
+  document.getElementById('swap-btn').style.display = 'none';
+  document.getElementById('swap-msg').textContent = '';
+  document.getElementById('voice-bar').classList.remove('visible');
+  // Show spectator banner
+  document.getElementById('spectator-banner').classList.add('show');
+  if(room.host && room.guest){
+    document.getElementById('spec-players-label').textContent = room.host + ' vs ' + room.guest;
+  }
+  // Show emoji bar for spectators
+  document.getElementById('emoji-bar').classList.add('show');
+  // Hide controls not relevant for spectators
+  document.getElementById('color-info').style.display = 'none';
+  document.getElementById('conn-dot').className = 'dot connected';
+  document.getElementById('conn-status').textContent = 'Watching live';
+
+  showScreen('game-screen');
+  buildBoard();
+  initChat();
+
+  // If game was already in progress, load saved state
+  if(room.gameState){
+    loadGameState(onlineRoom, room);
+  }
+
+  // Poll for live board updates
+  startSpectatorPolling();
+}
+
+function startSpectatorPolling(){
+  if(spectatorPollInterval) clearInterval(spectatorPollInterval);
+  spectatorPollInterval = setInterval(async ()=>{
+    if(!onlineRoom) return;
+    try {
+      const room = await fbRead('/rooms/'+onlineRoom);
+      if(!room) return;
+
+      // Update spectator count display for players
+      const specs = room.spectators ? Object.keys(room.spectators).length : 0;
+      const specEl = document.getElementById('spectator-count');
+      if(specEl) specEl.textContent = '👁 '+specs+' watching';
+      const specInfoEl = document.getElementById('spectator-info');
+      if(specInfoEl) specInfoEl.style.display = specs > 0 ? 'block' : 'none';
+
+      // Update spec count in banner
+      const specCountLabel = document.getElementById('spec-count-label');
+      if(specCountLabel) specCountLabel.textContent = specs > 1 ? '('+specs+' watching)' : '';
+
+      // Check chat mute status
+      spectatorChatEnabled = room.spectatorChatEnabled !== false; // default true
+      updateChatMuteUI();
+
+      // Sync board from gameState if moves happened
+      if(room.gameState){
+        const s = room.gameState;
+        // Only update if position changed
+        const newKey = s.board ? s.board.map(r=>r.map(p=>p||'.').join('')).join('|') : '';
+        const curKey = G.board.map(r=>r.map(p=>p||'.').join('')).join('|');
+        if(newKey !== curKey){
+          G.board = s.board;
+          G.turn = s.turn;
+          G.castling = s.castling || G.castling;
+          G.enPassant = s.enPassant || null;
+          G.history = s.history || [];
+          G.captured = s.captured || {w:[],b:[]};
+          renderBoard();
+          updateMoveHistory();
+          // Update player names
+          if(room.host) document.getElementById('name-white').textContent = room.host;
+          if(room.guest) document.getElementById('name-black').textContent = room.guest;
+        }
+      }
+    } catch(e){}
+  }, 2000);
+}
+
+function updateChatMuteUI(){
+  const input = document.getElementById('chat-input');
+  const micBtn = document.getElementById('chat-mic-btn');
+  const sendBtn = document.querySelector('.chat-send-btn');
+  const mutedMsg = document.getElementById('spec-chat-muted-msg');
+  if(isSpectator){
+    const muted = !spectatorChatEnabled;
+    input.disabled = muted;
+    if(micBtn) micBtn.disabled = muted;
+    if(sendBtn) sendBtn.disabled = muted;
+    input.placeholder = muted ? '💬 Chat muted by host' : 'Send a message...';
+    if(mutedMsg) mutedMsg.style.display = muted ? 'block' : 'none';
+  }
+}
+
+// Host toggles spectator chat
+function toggleSpectatorChat(){
+  if(!onlineRoom) return;
+  spectatorChatEnabled = !spectatorChatEnabled;
+  fbWrite('/rooms/'+onlineRoom+'/spectatorChatEnabled', spectatorChatEnabled);
+  const btn = document.getElementById('chat-mute-btn');
+  btn.textContent = spectatorChatEnabled ? '🔊 Spectator chat: ON' : '🔇 Spectator chat: OFF';
+  btn.style.background = spectatorChatEnabled ? 'var(--btn)' : '#5a2d2d';
+  appendSystemMessage(spectatorChatEnabled ? '🔊 Spectator chat enabled.' : '🔇 Spectator chat disabled by host.');
+}
+
+// ===================== EMOJI REACTIONS =====================
+function sendEmoji(emoji){
+  // Show locally immediately
+  spawnFloatingEmoji(emoji, playerName);
+  // Broadcast to room via Firebase
+  if(onlineRoom){
+    fbPush('/rooms/'+onlineRoom+'/emojis', {
+      emoji, name: playerName, ts: Date.now()
+    }).catch(()=>{});
+  }
+}
+
+function spawnFloatingEmoji(emoji, senderName){
+  // Spawn at random horizontal position across the board
+  const board = document.getElementById('board');
+  const rect = board ? board.getBoundingClientRect() : {left:100,width:300,bottom:400};
+  const x = rect.left + Math.random()*rect.width;
+  const y = rect.bottom - 20;
+
+  const el = document.createElement('div');
+  el.className = 'floating-emoji';
+  el.textContent = emoji;
+  el.style.left = x+'px';
+  el.style.top  = y+'px';
+  // Slight random horizontal drift
+  el.style.setProperty('--drift', (Math.random()*60-30)+'px');
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(), 2600);
+}
+
+// Poll for incoming emoji reactions
+let emojiPollInterval = null;
+let emojiLastIndex = -1;
+
+function startEmojiPolling(){
+  if(emojiPollInterval) clearInterval(emojiPollInterval);
+  emojiPollInterval = setInterval(async ()=>{
+    if(!onlineRoom) return;
+    try {
+      const emojis = await fbRead('/rooms/'+onlineRoom+'/emojis');
+      if(!emojis) return;
+      const keys = Object.keys(emojis).sort();
+      for(let i = emojiLastIndex+1; i < keys.length; i++){
+        const e = emojis[keys[i]];
+        // Don't show own emojis again (already shown locally)
+        if(e.name !== playerName){
+          spawnFloatingEmoji(e.emoji, e.name);
+        }
+        emojiLastIndex = i;
+      }
+    } catch(e){}
+  }, 1000);
+}
+
 function setMsg(txt){ document.getElementById('online-msg').textContent = txt; }
 
 async function fbWrite(path, data){
@@ -1864,11 +2198,11 @@ async function fbDelete(path){
 
 async function cleanupOnline(saveState){
   if(fbPollInterval){ clearInterval(fbPollInterval); fbPollInterval=null; }
-  // Save game state before clearing onlineRoom
   if(saveState && onlineRoom && G.history && G.history.length > 0 && !G.gameOver){
     await saveGameState();
   }
   if(onlineRoom){ onlineRoom=null; }
+  await cleanupSpectator();
   cleanupVoice();
   clearChat();
 }
@@ -1938,8 +2272,33 @@ function quickRejoin(){
   setTimeout(()=>joinRoom(), 400);
 } // end quickRejoin
 
-let onlineHostColor = 'w';
-let savedHostColor = 'w'; // persists across newGame() calls
+let boardSaveInterval = null;
+
+function startBoardStateSaving(){
+  if(boardSaveInterval) clearInterval(boardSaveInterval);
+  boardSaveInterval = setInterval(async ()=>{
+    if(!onlineRoom || gameMode !== 'online') return;
+    try {
+      await saveGameState(); // reuse existing saveGameState but keep status as joined
+      await fbWrite('/rooms/'+onlineRoom+'/status', 'joined'); // don't mark as paused
+    } catch(e){}
+  }, 5000);
+}
+
+async function cleanupSpectator(){
+  if(isSpectator && onlineRoom){
+    try { await fbDelete('/rooms/'+onlineRoom+'/spectators/'+spectatorId); } catch(e){}
+  }
+  if(spectatorPollInterval){ clearInterval(spectatorPollInterval); spectatorPollInterval=null; }
+  if(emojiPollInterval){ clearInterval(emojiPollInterval); emojiPollInterval=null; }
+  if(boardSaveInterval){ clearInterval(boardSaveInterval); boardSaveInterval=null; }
+  isSpectator = false;
+  document.getElementById('spectator-banner').classList.remove('show');
+  document.getElementById('emoji-bar').classList.remove('show');
+}
+
+let onlineHostColor = 'w'; // host's chosen color: 'w', 'b', or 'r'
+let savedHostColor = 'w';  // persists across newGame() calls
 
 function showCreateRoom(){
   document.getElementById('create-room-row').style.display='block';
@@ -2103,8 +2462,32 @@ async function joinRoom(){
 }
 
 function startPollingMessages(){
+  emojiLastIndex = -1;
+  startEmojiPolling();
   fbPollInterval = setInterval(async ()=>{
     if(!onlineRoom) return;
+    // Check handover signals
+    await checkHandoverSignal();
+    // Update spectator count + show handover button if spectators present
+    try {
+      const specs = await fbRead('/rooms/'+onlineRoom+'/spectators');
+      const count = specs ? Object.keys(specs).length : 0;
+      const specEl = document.getElementById('spectator-count');
+      if(specEl) specEl.textContent = '👁 '+count+' watching';
+      const specInfoEl = document.getElementById('spectator-info');
+      if(specInfoEl) specInfoEl.style.display = count > 0 ? 'block' : 'none';
+      // Show handover button to players when spectators are present
+      const handoverCtrl = document.getElementById('handover-ctrl');
+      if(handoverCtrl && gameMode==='online' && !isSpectator){
+        handoverCtrl.style.display = count > 0 ? 'block' : 'none';
+      }
+      // Check spectator chat mute status
+      const room = await fbRead('/rooms/'+onlineRoom);
+      if(room){
+        spectatorChatEnabled = room.spectatorChatEnabled !== false;
+        if(isSpectator) updateChatMuteUI();
+      }
+    } catch(e){}
     try {
       const msgs = await fbRead('/rooms/'+onlineRoom+'/messages');
       if(!msgs) return;
@@ -2249,6 +2632,13 @@ function startOnlineGame(){
   // Show color label
   updateColorLabel();
 
+  isSpectator = false;
+  document.getElementById('spectator-banner').classList.remove('show');
+  document.getElementById('emoji-bar').classList.add('show');
+  document.getElementById('spectator-info').style.display = 'none';
+  document.getElementById('chat-mute-ctrl').style.display = 'none';
+  document.getElementById('color-info').style.display = 'block';
+
   if(myOnlineColor === 'w'){
     document.getElementById('conn-dot').className = 'dot waiting';
     document.getElementById('conn-status').textContent = 'Waiting for opponent...';
@@ -2289,6 +2679,16 @@ function markOpponentConnected(opponentName){
   appendSystemMessage((opponentName||'Opponent') + ' joined — game begins!');
   // Enable voice chat now that both players are connected
   initVoice();
+  // Show spectator count + host chat control (only for host/white)
+  document.getElementById('spectator-info').style.display = 'block';
+  if(myOnlineColor === savedHostColor){
+    document.getElementById('chat-mute-ctrl').style.display = 'block';
+  }
+  // Start emoji polling for reactions
+  emojiLastIndex = -1;
+  startEmojiPolling();
+  // Save board state every 5 seconds for spectators to follow
+  startBoardStateSaving();
   renderBoard();
 }
 
@@ -2369,6 +2769,11 @@ async function sendChat(){
   const input = document.getElementById('chat-input');
   const text = input.value.trim();
   if(!text || !onlineRoom) return;
+  // Block if spectator chat is muted
+  if(isSpectator && !spectatorChatEnabled){
+    appendSystemMessage('💬 Chat is muted by host.');
+    return;
+  }
   input.value = '';
   // Add to UI immediately (optimistic)
   appendChatBubble(playerName, text, true);
@@ -2890,15 +3295,215 @@ function resign(){
   const winner = G.turn==='w' ? 'Black' : 'White';
   showGameOver(winner+' Wins!','By resignation');
 }
-let gameOverFired = false;
+// ===================== CONTROL HANDOVER =====================
+let controlColor = null;       // which color this client currently controls ('w','b', or null)
+let originalColor = null;      // the player's original color before handover
+let isDelegate = false;        // true if this spectator is currently playing on behalf of a player
+let delegateFor = null;        // 'w' or 'b' — which color this delegate controls
+
+// Track moves per contributor: { playerName: count }
+let moveContributors = { w:{}, b:{} };
+
+function showHandoverPicker(){
+  // Show list of current spectators to hand control to
+  if(!onlineRoom) return;
+  fbRead('/rooms/'+onlineRoom+'/spectators').then(specs=>{
+    if(!specs || Object.keys(specs).length === 0){
+      document.getElementById('handover-status').textContent = 'No spectators to hand to.';
+      setTimeout(()=>{ document.getElementById('handover-status').textContent=''; },2500);
+      return;
+    }
+    // Build picker UI inline
+    const names = Object.values(specs).map(s=>s.name).filter(Boolean);
+    const picked = prompt('Hand control to which spectator?\n'+names.map((n,i)=>(i+1)+'. '+n).join('\n')+'\n\nType their name exactly:');
+    if(!picked) return;
+    const match = Object.entries(specs).find(([,v])=>v.name===picked.trim());
+    if(!match){ alert('Spectator not found. Check the name.'); return; }
+    const [specId, specData] = match;
+    // Send handover offer via Firebase
+    fbWrite('/rooms/'+onlineRoom+'/handover', {
+      from: playerName,
+      fromColor: myOnlineColor,
+      toId: specId,
+      toName: specData.name,
+      status: 'offered',
+      ts: Date.now()
+    });
+    document.getElementById('handover-status').textContent = '⏳ Waiting for '+specData.name+'...';
+    document.getElementById('handover-btn').textContent = '🔄 Reclaim Control';
+    document.getElementById('handover-btn').onclick = reclaimControl;
+  });
+}
+
+function reclaimControl(){
+  if(!onlineRoom) return;
+  fbWrite('/rooms/'+onlineRoom+'/handover', {
+    from: playerName,
+    fromColor: originalColor || myOnlineColor,
+    status: 'reclaimed',
+    ts: Date.now()
+  });
+  myOnlineColor = originalColor || myOnlineColor;
+  playerColor = myOnlineColor;
+  G.myColor = myOnlineColor;
+  isDelegate = false;
+  delegateFor = null;
+  document.getElementById('handover-btn').textContent = '🎮 Hand Over Control';
+  document.getElementById('handover-btn').onclick = showHandoverPicker;
+  document.getElementById('handover-status').textContent = '✅ Control reclaimed!';
+  setTimeout(()=>{ document.getElementById('handover-status').textContent=''; },2500);
+  appendSystemMessage('🎮 '+playerName+' reclaimed control.');
+  renderBoard();
+}
+
+function showHandoverModal(fromName, forColor){
+  document.getElementById('handover-title').textContent = '🎮 Control offered!';
+  document.getElementById('handover-desc').textContent =
+    fromName+' is offering you control of the '+( forColor==='w'?'White ♔':'Black ♚')+' pieces.';
+  document.getElementById('handover-modal').classList.add('open');
+  document.getElementById('handover-modal').style.visibility='visible';
+  document.getElementById('handover-modal').style.display='flex';
+}
+
+function acceptHandover(){
+  document.getElementById('handover-modal').classList.remove('open');
+  document.getElementById('handover-modal').style.display='none';
+  if(!onlineRoom) return;
+  fbRead('/rooms/'+onlineRoom+'/handover').then(h=>{
+    if(!h) return;
+    isDelegate = true;
+    delegateFor = h.fromColor;
+    originalColor = myOnlineColor;
+    myOnlineColor = h.fromColor;
+    playerColor = h.fromColor;
+    G.myColor = h.fromColor;
+    gameMode = 'online'; // ensure we can make moves
+    fbWrite('/rooms/'+onlineRoom+'/handover', {...h, status:'accepted', delegateName: playerName});
+    appendSystemMessage('🎮 You now control '+( h.fromColor==='w'?'White':'Black')+' pieces for '+h.from+'!');
+    document.getElementById('spectator-banner').classList.remove('show');
+    renderBoard();
+  });
+}
+
+function declineHandover(){
+  document.getElementById('handover-modal').classList.remove('open');
+  document.getElementById('handover-modal').style.display='none';
+  if(!onlineRoom) return;
+  fbRead('/rooms/'+onlineRoom+'/handover').then(h=>{
+    if(h) fbWrite('/rooms/'+onlineRoom+'/handover', {...h, status:'declined'});
+  });
+  appendSystemMessage('Handover declined.');
+}
+
+// Poll handover state in startPollingMessages
+async function checkHandoverSignal(){
+  if(!onlineRoom) return;
+  try {
+    const h = await fbRead('/rooms/'+onlineRoom+'/handover');
+    if(!h || !h.status) return;
+    // Spectator receives offer
+    if(isSpectator && h.status==='offered' && h.toId===spectatorId){
+      showHandoverModal(h.from, h.fromColor);
+    }
+    // Original player sees accept/decline
+    if(!isSpectator && h.from===playerName){
+      if(h.status==='accepted'){
+        document.getElementById('handover-status').textContent = '🎮 '+h.delegateName+' is playing for you';
+        appendSystemMessage('🎮 '+h.delegateName+' accepted control of your pieces!');
+        // Clear status from Firebase to avoid repeated messages
+        await fbWrite('/rooms/'+onlineRoom+'/handover/status','ack');
+      } else if(h.status==='declined'){
+        document.getElementById('handover-status').textContent = 'Offer declined.';
+        document.getElementById('handover-btn').textContent = '🎮 Hand Over Control';
+        document.getElementById('handover-btn').onclick = showHandoverPicker;
+        await fbWrite('/rooms/'+onlineRoom+'/handover/status','ack');
+      } else if(h.status==='reclaimed'){
+        document.getElementById('handover-status').textContent='';
+      }
+    }
+    // If delegate is reclaimed, revert to spectator
+    if(isDelegate && h.status==='reclaimed'){
+      myOnlineColor = 'spectator';
+      playerColor = 'w';
+      isDelegate = false; delegateFor = null;
+      gameMode = 'spectator';
+      document.getElementById('spectator-banner').classList.add('show');
+      appendSystemMessage('🎮 Control returned to original player.');
+      renderBoard();
+    }
+  } catch(e){}
+}
+
+// ===================== POST-GAME STATS =====================
+function buildGameStats(title, msg){
+  const winnerIsWhite = title.startsWith('White');
+  const isDraw = title === 'Draw';
+
+  // Count moves per player/contributor
+  const wMoves = moveContributors.w;
+  const bMoves = moveContributors.b;
+  const wTotal = Object.values(wMoves).reduce((a,b)=>a+b,0) || 1;
+  const bTotal = Object.values(bMoves).reduce((a,b)=>a+b,0) || 1;
+  const allMoves = G.history.length;
+  const whiteMoves = Math.ceil(allMoves/2);
+  const blackMoves = Math.floor(allMoves/2);
+  const wCaps = G.captured.w.length;
+  const bCaps = G.captured.b.length;
+
+  let html = '';
+
+  // Win bar
+  if(!isDraw){
+    const winPct = Math.round((winnerIsWhite ? whiteMoves : blackMoves) / Math.max(allMoves,1) * 100);
+    html += `
+      <div class="go-stat-bar">
+        <div class="go-stat-label"><span>⚪ White</span><span>${whiteMoves} moves · ${wCaps} captures</span></div>
+        <div class="go-stat-track"><div class="go-stat-fill white" style="width:${Math.round(whiteMoves/Math.max(allMoves,1)*100)}%"></div></div>
+      </div>
+      <div class="go-stat-bar">
+        <div class="go-stat-label"><span>⚫ Black</span><span>${blackMoves} moves · ${bCaps} captures</span></div>
+        <div class="go-stat-track"><div class="go-stat-fill black" style="width:${Math.round(blackMoves/Math.max(allMoves,1)*100)}%"></div></div>
+      </div>`;
+  }
+
+  // Contributor breakdown — show who made what % of moves for winning side
+  const winContribs = isDraw ? {...wMoves,...bMoves} : (winnerIsWhite ? wMoves : bMoves);
+  const winTotal = isDraw ? allMoves : (winnerIsWhite ? whiteMoves : blackMoves);
+  const contribEntries = Object.entries(winContribs).sort((a,b)=>b[1]-a[1]);
+
+  if(contribEntries.length > 0){
+    html += `<div style="font-family:'Playfair Display',serif;color:var(--accent);font-size:0.78rem;margin:10px 0 6px;">
+      ${isDraw?'All':'Winning team'} contributors</div>`;
+    html += '<div class="go-contributors">';
+    contribEntries.forEach(([name, count])=>{
+      const pct = Math.round(count / Math.max(winTotal,1) * 100);
+      html += `<div class="go-contributor">
+        <div class="contrib-name">${escapeHtml(name)}</div>
+        <div class="contrib-pct">${pct}%</div>
+        <div style="color:var(--text-muted);font-size:0.72rem;">${count} move${count!==1?'s':''}</div>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  html += `<div style="color:var(--text-muted);font-size:0.75rem;margin-top:8px;text-align:center;">
+    Total: ${allMoves} moves played</div>`;
+
+  document.getElementById('go-stats-content').innerHTML = html;
+  document.getElementById('go-stats').style.display = 'block';
+}
 function showGameOver(title, msg){
-  if(gameOverFired) return;  // prevent double-recording on checkmate
+  if(gameOverFired) return;
   gameOverFired = true;
   G.gameOver = true;
 
   document.getElementById('go-title').textContent = title;
   document.getElementById('go-msg').textContent = msg;
+  // Build post-game contributor stats
+  buildGameStats(title, msg);
   document.getElementById('gameover-modal').classList.add('open');
+  document.getElementById('gameover-modal').style.display='flex';
+  document.getElementById('gameover-modal').style.visibility='visible';
 
   const totalMoves = G.history.length;
   const isCheckmate = msg === 'Checkmate';
@@ -2952,6 +3557,7 @@ async function backToMenu(){
   document.getElementById('online-options').classList.remove('open');
   document.getElementById('create-room-row').style.display='none';
   document.getElementById('join-row').style.display='none';
+  document.getElementById('watch-row').style.display='none';
   // Clear card highlights
   document.querySelectorAll('.menu-card').forEach(c=>c.classList.remove('active-card'));
   // Reset state
