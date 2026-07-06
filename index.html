@@ -2606,28 +2606,8 @@ async function createRoom(){
     savedHostColor = hostColor;
     setMsg('✅ Room ready! Share code: '+code+' — You play '+(hostColor==='w'?'White ♔':'Black ♚'));
     startOnlineGame();
-
-    // Use fbPollInterval for joiner-wait so cleanupOnline() can stop it if needed
-    if(fbPollInterval){ clearInterval(fbPollInterval); fbPollInterval=null; }
-    fbPollInterval = setInterval(async ()=>{
-      if(!onlineRoom) return; // cleaned up
-      try {
-        const room = await fbRead('/rooms/'+code);
-        if(!room) return;
-        // Check for any active status — guest may have joined
-        const hasGuest = room.guest && room.guest.length > 0;
-        const isActive = room.status === 'joined' || room.status === 'resumed';
-        if(hasGuest && isActive){
-          clearInterval(fbPollInterval); fbPollInterval = null;
-          const guestName = room.guest;
-          markOpponentConnected(guestName);
-          startPollingMessages(); // now switch to full message polling
-          if(room.gameState && room.status === 'resumed'){
-            await loadGameState(code, room);
-          }
-        }
-      } catch(e){}
-    }, 1000);
+    // Single unified poll handles joiner detection + messages + everything
+    startPollingMessages();
   } catch(e){
     setMsg('❌ Could not create room: ' + (e.message.includes('Firebase') ? 'Check Firebase rules allow read/write!' : 'Check your internet.'));
   }
@@ -2741,6 +2721,7 @@ function startPollingMessages(){
   const joinedAt = Date.now(); // only process messages newer than this
   let lastBoardKey = '';
   let gameReadyShown = false;
+  let opponentDetected = false;
   const processedKeys = new Set();
 
   // Immediately check if gameReady already set
@@ -2755,6 +2736,17 @@ function startPollingMessages(){
     try {
       const room = await fbRead('/rooms/'+onlineRoom);
       if(!room) return;
+
+      // ── HOST: detect joiner (fires once) ──
+      if(!opponentDetected && myOnlineColor === savedHostColor &&
+         room.guest && room.guest.length > 0 &&
+         (room.status === 'joined' || room.status === 'resumed')){
+        opponentDetected = true;
+        markOpponentConnected(room.guest);
+        if(room.gameState && room.status === 'resumed'){
+          await loadGameState(onlineRoom, room);
+        }
+      }
 
       // ── Game ready (joiner only, once) ──
       if(!gameReadyShown && myOnlineColor !== savedHostColor && room.gameReady===true){
