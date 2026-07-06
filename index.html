@@ -1324,6 +1324,28 @@ function boardKey(){
   return G.board.map(r=>r.map(c=>c||'.').join('')).join('|')+G.turn;
 }
 
+function isInsufficientMaterial(board){
+  // Collect all non-king pieces
+  const pieces = {w:[], b:[]};
+  let bishopSquareColors = [];
+  for(let r=0;r<8;r++) for(let f=0;f<8;f++){
+    const p = board[r][f];
+    if(!p || type(p)==='K') continue;
+    pieces[color(p)].push(type(p));
+    if(type(p)==='B') bishopSquareColors.push((r+f)%2);
+  }
+  const w=pieces.w, b=pieces.b;
+  // K vs K
+  if(w.length===0 && b.length===0) return true;
+  // K + one minor (bishop or knight) vs bare K
+  const isOneMinor = a => a.length===1 && (a[0]==='B'||a[0]==='N');
+  if((isOneMinor(w)&&b.length===0) || (isOneMinor(b)&&w.length===0)) return true;
+  // K+B vs K+B with both bishops on same colour squares
+  if(w.length===1 && b.length===1 && w[0]==='B' && b[0]==='B' &&
+     bishopSquareColors.length===2 && bishopSquareColors[0]===bishopSquareColors[1]) return true;
+  return false;
+}
+
 function color(p){ return p ? p[0] : null; }
 function type(p){ return p ? p[1] : null; }
 function opp(c){ return c==='w'?'b':'w'; }
@@ -1772,7 +1794,22 @@ function updateStatus(){
   }
 
   // ---- 50-move rule ----
-  // (optional but good practice — skip for now, already handled by repetition)
+  // halfMove counts plies since last pawn move or capture; 100 plies = 50 full moves
+  if(G.halfMove >= 100){
+    G.gameOver = true;
+    setTimeout(()=>showGameOver('Draw','50-move rule'),300);
+    document.getElementById('status-bar').textContent='Draw by 50-move rule!';
+    return;
+  }
+
+  // ---- Insufficient material ----
+  if(isInsufficientMaterial(G.board)){
+    G.gameOver = true;
+    setTimeout(()=>showGameOver('Draw','Insufficient material'),300);
+    document.getElementById('status-bar').textContent='Draw — insufficient material!';
+    return;
+  }
+
   // Resolve display name — strip waiting placeholder if present
   const rawCurName = G.turn==='w'
     ? document.getElementById('name-white').textContent
@@ -1889,17 +1926,26 @@ function doMove(move){
     enPassant:G.enPassant,
     captured:{w:[...G.captured.w],b:[...G.captured.b]},
     history:[...G.history],
-    turn:G.turn
+    turn:G.turn,
+    halfMove:G.halfMove,
+    posHistory:[...G.posHistory]
   });
 
   const lm=getLegalMoves(G.board,G.turn,G.castling,G.enPassant);
   const notation=moveNotation(G.board,move,lm);
+  const movingPiece=G.board[move.from[0]][move.from[1]];
   const {board:nb,enPassant:nep,castling:nc,captured:cap}=applyMove(G.board,move,G.enPassant,G.castling);
 
   const capturingColor = G.turn; // save BEFORE turn flips
   G.board=nb;
   G.castling=nc;
   G.enPassant=nep;
+  // 50-move clock: reset on pawn move or capture, else increment
+  if(type(movingPiece)==='P' || cap){
+    G.halfMove = 0;
+  } else {
+    G.halfMove = (G.halfMove||0) + 1;
+  }
   if(cap){
     G.captured[capturingColor].push(cap);
     // Trigger capture animation after board re-renders
@@ -1975,10 +2021,13 @@ async function completePromo(t){
 }
 
 // ===================== UNDO =====================
-function undoMove(){
-  if(gameMode==='online') return;
-  let steps=gameMode==='ai'?2:1;
-  while(steps-->0&&historyStack.length){
+// Online undo tracking: max 2 per player, needs opponent permission
+let undoCounts = {w:0, b:0};
+const MAX_UNDOS = 2;
+let undoRequestPending = false;
+
+function performUndoSteps(steps){
+  while(steps-->0 && historyStack.length){
     const s=historyStack.pop();
     G.board=s.board;
     G.castling=s.castling;
@@ -1986,12 +2035,92 @@ function undoMove(){
     G.captured=s.captured;
     G.history=s.history;
     G.turn=s.turn;
+    G.halfMove = s.halfMove !== undefined ? s.halfMove : G.halfMove;
+    if(s.posHistory) G.posHistory = s.posHistory;
     G.gameOver=false;
   }
-  gameOverFired=false; // allow game-over to fire again if position re-reached
+  gameOverFired=false;
   lastMove=null;
   selected=null; legalMovesForSel=[];
   renderBoard();
+  updateMoveHistory();
+}
+
+function undoMove(){
+  if(gameMode==='spectator') return;
+  if(gameMode==='online'){
+    // Online: request opponent's permission, max 2 undos per player
+    if(G.gameOver){ return; }
+    if(undoCounts[myOnlineColor] >= MAX_UNDOS){
+      appendSystemMessage('❌ You have used all '+MAX_UNDOS+' undos.');
+      switchTab('chat');
+      return;
+    }
+    if(historyStack.length === 0){
+      appendSystemMessage('No moves to undo.');
+      return;
+    }
+    if(undoRequestPending){
+      appendSystemMessage('⏳ Undo request already pending...');
+      return;
+    }
+    undoRequestPending = true;
+    sendOnlineMessage({type:'undo-request', requester: myOnlineColor});
+    appendSystemMessage('⏳ Undo requested ('+(undoCounts[myOnlineColor]+1)+'/'+MAX_UNDOS+') — waiting for opponent...');
+    switchTab('chat');
+    return;
+  }
+  // Local / AI mode — instant undo (AI undoes both plies)
+  performUndoSteps(gameMode==='ai' ? 2 : 1);
+}
+
+// How many plies to undo so it becomes the requester's turn again
+function undoPliesFor(requesterColor){
+  // If requester just moved (it's now opponent's turn): 1 ply.
+  // If opponent already replied (it's requester's turn): 2 plies.
+  return G.turn === requesterColor ? 2 : 1;
+}
+
+function showUndoRequestUI(requesterColor){
+  const cm = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.className = 'chat-bubble system';
+  div.id = 'undo-request-ui';
+  const oppName = requesterColor==='w'
+    ? document.getElementById('name-white').textContent
+    : document.getElementById('name-black').textContent;
+  div.innerHTML = `
+    <div style="background:var(--panel);border:1px solid var(--accent);border-radius:8px;padding:10px;text-align:center;">
+      <div style="color:var(--accent);font-family:'Playfair Display',serif;margin-bottom:8px;">
+        ↩ ${escapeHtml(oppName)} requests an undo (${undoCounts[requesterColor]+1}/${MAX_UNDOS})
+      </div>
+      <div style="display:flex;gap:8px;justify-content:center;">
+        <button onclick="acceptUndo('${requesterColor}')" style="padding:6px 16px;background:#2d5a2d;color:#a8e6a8;border:1px solid #4caf50;border-radius:6px;cursor:pointer;font-family:'Crimson Text',serif;">✅ Allow</button>
+        <button onclick="declineUndo()" style="padding:6px 14px;background:#5a2d2d;color:#e6a8a8;border:1px solid #cf6060;border-radius:6px;cursor:pointer;font-family:'Crimson Text',serif;">❌ Decline</button>
+      </div>
+    </div>`;
+  cm.appendChild(div);
+  cm.scrollTop = cm.scrollHeight;
+  switchTab('chat');
+}
+
+async function acceptUndo(requesterColor){
+  const ui = document.getElementById('undo-request-ui');
+  if(ui) ui.remove();
+  const plies = undoPliesFor(requesterColor);
+  performUndoSteps(plies);
+  undoCounts[requesterColor]++;
+  await sendOnlineMessage({type:'undo-accept', requester: requesterColor, plies});
+  // Save corrected board state so fallback sync doesn't restore the undone move
+  try { await saveGameState(); } catch(e){}
+  appendSystemMessage('✅ Undo allowed — '+plies+' move'+(plies>1?'s':'')+' taken back.');
+}
+
+async function declineUndo(){
+  const ui = document.getElementById('undo-request-ui');
+  if(ui) ui.remove();
+  await sendOnlineMessage({type:'undo-decline'});
+  appendSystemMessage('Undo declined.');
 }
 
 // ===================== MENU HANDLERS =====================
@@ -2695,6 +2824,7 @@ function _applyGameReadyUI(){
   // Called when joiner receives gameReady=true from host
   document.getElementById('draw-btn').style.display = '';
   document.getElementById('resign-btn').style.display = '';
+  document.getElementById('undo-btn').style.display = '';
   document.getElementById('swap-btn').style.display = 'block';
   document.getElementById('conn-dot').className = 'dot connected';
   document.getElementById('conn-status').textContent = '🟢 Game started!';
@@ -2730,6 +2860,20 @@ async function handleOnlineMessage(msg){
     document.getElementById('conn-dot').className='dot';
     document.getElementById('conn-status').textContent='Opponent left — game paused';
     appendSystemMessage('⏸ Opponent left. They can rejoin with code: '+onlineRoom+' (30 min window).');
+  } else if(msg.type==='undo-request'){
+    // Opponent wants to undo — show Allow/Decline UI
+    showUndoRequestUI(msg.requester);
+  } else if(msg.type==='undo-accept'){
+    // Opponent allowed my undo — perform it locally with the same ply count
+    performUndoSteps(msg.plies || undoPliesFor(msg.requester));
+    undoCounts[msg.requester] = (undoCounts[msg.requester]||0) + 1;
+    undoRequestPending = false;
+    // Save corrected state so fallback sync doesn't restore the undone move
+    try { await saveGameState(); } catch(e){}
+    appendSystemMessage('✅ Undo accepted — move taken back ('+undoCounts[msg.requester]+'/'+MAX_UNDOS+' used).');
+  } else if(msg.type==='undo-decline'){
+    undoRequestPending = false;
+    appendSystemMessage('❌ Opponent declined your undo request.');
   } else if(msg.type==='swap-request'){
     document.getElementById('swap-msg').textContent='Opponent wants to swap colors!';
     document.getElementById('swap-btn').textContent='✅ Accept Swap';
@@ -2831,12 +2975,15 @@ function startOnlineGame(){
   document.getElementById('game-title').textContent = 'Online Game';
   document.getElementById('online-side').style.display = 'block';
   document.getElementById('room-code-display').textContent = onlineRoom;
-  document.getElementById('undo-btn').style.display = 'none';
+  document.getElementById('undo-btn').style.display = 'none'; // shown when game starts
   document.getElementById('swap-btn').style.display = 'none';
   document.getElementById('swap-msg').textContent = '';
   document.getElementById('swap-btn').textContent = '🔄 Swap Colors';
   document.getElementById('swap-btn').onclick = requestSwap;
   historyStack=[]; lastMove=null; selected=null; legalMovesForSel=[];
+  // Reset online undo tracking for new game
+  undoCounts = {w:0, b:0};
+  undoRequestPending = false;
 
   // Hide Draw/Resign until both players are connected
   document.getElementById('draw-btn').style.display = 'none';
@@ -2882,9 +3029,10 @@ function markOpponentConnected(opponentName){
   gameOverFired = false;
   document.getElementById('conn-dot').className = 'dot connected';
   document.getElementById('conn-status').textContent = '🟢 Opponent connected!';
-  // Show Draw/Resign now that both players are in
+  // Show Draw/Resign/Undo now that both players are in
   document.getElementById('draw-btn').style.display = '';
   document.getElementById('resign-btn').style.display = '';
+  document.getElementById('undo-btn').style.display = '';
   document.getElementById('swap-btn').style.display = 'block';
 
   // Replace the ⏳ Waiting... placeholder with real opponent name
