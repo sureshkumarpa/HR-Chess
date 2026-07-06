@@ -29,8 +29,20 @@
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
     navigator.serviceWorker.register('sw.js')
-      .then(()=>console.log('✅ SW registered'))
+      .then(reg=>{
+        console.log('✅ SW registered');
+        // Check for a newer sw.js immediately
+        reg.update().catch(()=>{});
+      })
       .catch(e=>console.log('SW error:', e));
+  });
+  // When a NEW service worker takes control (after an update),
+  // reload once so the fresh network-first version is used
+  let swReloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+    if(swReloaded) return;
+    swReloaded = true;
+    window.location.reload();
   });
 }
 
@@ -2423,6 +2435,7 @@ function setMsg(txt){ document.getElementById('online-msg').textContent = txt; }
 async function fbWrite(path, data){
   const r = await fetch(FB_URL+path+'.json', {
     method:'PUT', headers:{'Content-Type':'application/json'},
+    cache:'no-store',
     body: JSON.stringify(data)
   });
   if(!r.ok){
@@ -2431,13 +2444,14 @@ async function fbWrite(path, data){
   }
 }
 async function fbRead(path){
-  const r = await fetch(FB_URL+path+'.json');
+  const r = await fetch(FB_URL+path+'.json', {cache:'no-store'});
   if(!r.ok) return null;
   return r.json();
 }
 async function fbPush(path, data){
   const r = await fetch(FB_URL+path+'.json', {
     method:'POST', headers:{'Content-Type':'application/json'},
+    cache:'no-store',
     body: JSON.stringify(data)
   });
   if(!r.ok){
@@ -2447,7 +2461,7 @@ async function fbPush(path, data){
   return r.json();
 }
 async function fbDelete(path){
-  await fetch(FB_URL+path+'.json', {method:'DELETE'});
+  await fetch(FB_URL+path+'.json', {method:'DELETE', cache:'no-store'});
 }
 
 async function cleanupOnline(saveState){
