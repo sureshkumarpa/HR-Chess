@@ -2292,21 +2292,30 @@ function startEmojiPolling(){
 function setMsg(txt){ document.getElementById('online-msg').textContent = txt; }
 
 async function fbWrite(path, data){
-  await fetch(FB_URL+path+'.json', {
+  const r = await fetch(FB_URL+path+'.json', {
     method:'PUT', headers:{'Content-Type':'application/json'},
     body: JSON.stringify(data)
   });
+  if(!r.ok){
+    const err = await r.text().catch(()=> '');
+    throw new Error('Firebase write failed ('+r.status+'): '+err);
+  }
 }
 async function fbRead(path){
   const r = await fetch(FB_URL+path+'.json');
-  return r.ok ? r.json() : null;
+  if(!r.ok) return null;
+  return r.json();
 }
 async function fbPush(path, data){
   const r = await fetch(FB_URL+path+'.json', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify(data)
   });
-  return r.ok ? r.json() : null;
+  if(!r.ok){
+    const err = await r.text().catch(()=> '');
+    throw new Error('Firebase push failed ('+r.status+'): '+err);
+  }
+  return r.json();
 }
 async function fbDelete(path){
   await fetch(FB_URL+path+'.json', {method:'DELETE'});
@@ -2441,7 +2450,10 @@ async function createRoom(){
   cleanupOnline(false);
   const hostColor = onlineHostColor==='r' ? (Math.random()<0.5?'w':'b') : onlineHostColor;
   const guestColor = hostColor==='w' ? 'b' : 'w';
-  const code = Math.random().toString(36).substr(2,6).toUpperCase();
+  // Safe alphabet — no 0/O, 1/I/L confusion
+  const SAFE = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for(let i=0;i<6;i++) code += SAFE[Math.floor(Math.random()*SAFE.length)];
   setMsg('Creating room...');
   try {
     await fbWrite('/rooms/'+code, {
@@ -2454,6 +2466,12 @@ async function createRoom(){
       gameReady: false,
       messages: null
     });
+    // VERIFY the room was actually written (catches Firebase permission issues)
+    const verify = await fbRead('/rooms/'+code);
+    if(!verify || verify.host !== playerName){
+      setMsg('❌ Firebase blocked the write! Check database rules: {".read":true,".write":true}');
+      return;
+    }
     onlineRoom = code;
     myOnlineColor = hostColor;
     savedHostColor = hostColor;
@@ -2482,7 +2500,7 @@ async function createRoom(){
       } catch(e){}
     }, 1000);
   } catch(e){
-    setMsg('❌ Could not create room. Check your internet.');
+    setMsg('❌ Could not create room: ' + (e.message.includes('Firebase') ? 'Check Firebase rules allow read/write!' : 'Check your internet.'));
   }
 }
 
