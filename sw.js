@@ -1,12 +1,6 @@
-const CACHE = 'hr-chess-v2';
+const CACHE = 'hr-chess-v3';
 
 self.addEventListener('install', e => {
-  e.waitUntil(
-    caches.open(CACHE).then(cache => cache.addAll([
-      '/HR-Chess/',
-      '/HR-Chess/index.html'
-    ])).catch(() => {})
-  );
   self.skipWaiting();
 });
 
@@ -21,16 +15,38 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if(e.request.method !== 'GET') return;
-  e.respondWith(
-    caches.match(e.request).then(cached => {
-      if(cached) return cached;
-      return fetch(e.request).then(res => {
-        if(res.ok) {
+
+  const url = new URL(e.request.url);
+
+  // Never intercept Firebase or external API calls
+  if(url.hostname.includes('firebasedatabase.app')) return;
+
+  // NETWORK-FIRST for HTML/navigation — always get latest version,
+  // fall back to cache only when offline
+  if(e.request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname.endsWith('/')){
+    e.respondWith(
+      fetch(e.request).then(res => {
+        if(res.ok){
           const clone = res.clone();
           caches.open(CACHE).then(c => c.put(e.request, clone));
         }
         return res;
-      }).catch(() => cached);
+      }).catch(() => caches.match(e.request))
+    );
+    return;
+  }
+
+  // CACHE-FIRST for static assets (icons, manifest)
+  e.respondWith(
+    caches.match(e.request).then(cached => {
+      if(cached) return cached;
+      return fetch(e.request).then(res => {
+        if(res.ok){
+          const clone = res.clone();
+          caches.open(CACHE).then(c => c.put(e.request, clone));
+        }
+        return res;
+      });
     })
   );
 });
