@@ -2543,6 +2543,7 @@ async function saveGameState(pauseGame=false){
       history: G.history,
       captured: G.captured,
       posHistory: G.posHistory,
+      halfMove: G.halfMove || 0,
       savedAt: Date.now(),
       expiresAt: Date.now() + 30*60*1000
     };
