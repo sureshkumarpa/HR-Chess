@@ -988,20 +988,33 @@ document.addEventListener('DOMContentLoaded', ()=>{
   loadPlayerName();
 });
 
-// Auto-save game when tab is closed/refreshed accidentally
-window.addEventListener('beforeunload', ()=>{
+// Auto-save game when tab is closed/refreshed/back-button (uses keepalive PUT —
+// sendBeacon sends POST which Firebase treats as push, corrupting the data!)
+function saveOnLeave(){
   if(gameMode==='online' && onlineRoom && G.history && G.history.length > 0 && !G.gameOver){
     const state = {
       board: G.board, turn: G.turn, castling: G.castling,
       enPassant: G.enPassant, history: G.history,
       captured: G.captured, posHistory: G.posHistory,
+      halfMove: G.halfMove || 0,
       savedAt: Date.now(), expiresAt: Date.now() + 30*60*1000
     };
-    // sendBeacon works even when tab is closing
-    navigator.sendBeacon(FB_URL+'/rooms/'+onlineRoom+'/gameState.json', JSON.stringify(state));
-    navigator.sendBeacon(FB_URL+'/rooms/'+onlineRoom+'/status.json', JSON.stringify('paused'));
+    try {
+      fetch(FB_URL+'/rooms/'+onlineRoom+'/gameState.json', {
+        method:'PUT', keepalive:true,
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(state)
+      });
+      fetch(FB_URL+'/rooms/'+onlineRoom+'/status.json', {
+        method:'PUT', keepalive:true,
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify('paused')
+      });
+    } catch(e){}
   }
-});
+}
+window.addEventListener('beforeunload', saveOnLeave);
+window.addEventListener('pagehide', saveOnLeave); // fires reliably on mobile back-button
 
 function cancelLocalStart(){
   closeModal('local-names-modal');
@@ -1330,6 +1343,8 @@ function newGame(){
   };
   G.posHistory.push(boardKey());
   moveContributors = { w:{}, b:{} };
+  undoCounts = {w:0, b:0};
+  undoRequestPending = false;
 }
 
 function boardKey(){
@@ -2082,8 +2097,48 @@ function undoMove(){
     switchTab('chat');
     return;
   }
-  // Local / AI mode — instant undo (AI undoes both plies)
-  performUndoSteps(gameMode==='ai' ? 2 : 1);
+  // ── vs Computer: max 2 undos, computer grants permission via chat ──
+  if(gameMode==='ai'){
+    if(historyStack.length===0) return;
+    if(undoCounts[playerColor] >= MAX_UNDOS){
+      appendChatBubble('Computer', "No more takebacks — you've used all "+MAX_UNDOS+" undos! 😄", false);
+      bumpChatUnread();
+      return;
+    }
+    undoCounts[playerColor]++;
+    const n = undoCounts[playerColor];
+    appendChatBubble('Computer',
+      (n===1 ? "Alright, I'll allow it... this time. ("+n+"/"+MAX_UNDOS+")"
+             : "Okay, last one! No more after this. ("+n+"/"+MAX_UNDOS+")"), false);
+    bumpChatUnread();
+    // Undo until it's the player's turn again
+    performUndoSteps(G.turn===playerColor ? 2 : 1);
+    return;
+  }
+
+  // ── Local 2P: max 2 undos each, opponent must confirm on-screen ──
+  if(historyStack.length===0) return;
+  const requester = opp(G.turn); // the player who made the last move
+  const reqName = requester==='w' ? localP1Name : localP2Name;
+  const permName = G.turn==='w' ? localP1Name : localP2Name;
+  if(undoCounts[requester] >= MAX_UNDOS){
+    alert(reqName+' has already used all '+MAX_UNDOS+' undos!');
+    return;
+  }
+  if(!confirm(permName+', do you allow '+reqName+' to undo their last move? ('+(undoCounts[requester]+1)+'/'+MAX_UNDOS+')')){
+    return; // permission denied
+  }
+  undoCounts[requester]++;
+  performUndoSteps(1);
+}
+
+function bumpChatUnread(){
+  if(currentTab !== 'chat'){
+    chatUnreadCount++;
+    const badge = document.getElementById('chat-unread');
+    badge.textContent = chatUnreadCount;
+    badge.classList.add('show');
+  }
 }
 
 // How many plies to undo so it becomes the requester's turn again
@@ -2180,6 +2235,7 @@ function startAI(){
   historyStack=[]; lastMove=null; selected=null; legalMovesForSel=[];
   showScreen('game-screen');
   buildBoard();
+  initAIChat(); // enable chat with the Computer
   if(playerColor!=='w') setTimeout(runAI,400);
 }
 
@@ -2500,8 +2556,14 @@ async function saveGameState(pauseGame=false){
 
 async function loadGameState(code, room){
   const s = room.gameState;
-  if(!s) return;
+  // Validate: must be a proper 8x8 board (protects against corrupted saves)
+  if(!s || !Array.isArray(s.board) || s.board.length !== 8 ||
+     !s.board.every(row => Array.isArray(row) && row.length === 8)){
+    appendSystemMessage('⚠ Saved game data was corrupted — starting fresh position.');
+    return;
+  }
   G.board = s.board;
+  G.halfMove = s.halfMove || 0;
   G.turn = s.turn;
   G.castling = s.castling || {wK:true,wQ:true,bK:true,bQ:true};
   G.enPassant = s.enPassant || null;
@@ -2641,8 +2703,14 @@ async function joinRoom(){
       setMsg('❌ Room has expired (30 min limit). Please create a new room.'); return;
     }
 
-    const status = room.status || 'waiting';
-    const hasGameState = !!(room.gameState);
+    // Normalize status — old sendBeacon bug could corrupt it into an object
+    const status = (typeof room.status === 'string') ? room.status : 'joined';
+    // Valid game state = has a proper 8x8 board array with moves played
+    const hasGameState = !!(room.gameState &&
+                            Array.isArray(room.gameState.board) &&
+                            room.gameState.board.length === 8 &&
+                            Array.isArray(room.gameState.history) &&
+                            room.gameState.history.length > 0);
 
     // Determine who this player is — host or guest
     const isHost  = room.host  && room.host  === playerName;
@@ -2681,7 +2749,7 @@ async function joinRoom(){
 
     const hostName  = room.host  || 'Opponent';
     const guestName = room.guest || playerName;
-    const resuming  = hasGameState && (status === 'paused' || status === 'joined' || status === 'resumed');
+    const resuming  = hasGameState; // valid saved game = resume, regardless of status
 
     // Write guest name AND status atomically in one call to avoid race condition
     await fbWrite('/rooms/'+code+'/guest', playerName);
@@ -3090,6 +3158,8 @@ function initChat(){
   chatLastIndex = -1;
   chatUnreadCount = 0;
   currentTab = 'history';
+  document.getElementById('chat-mic-btn').style.display = ''; // voice msgs available online
+  document.getElementById('chat-input').placeholder = 'Type a message...';
   document.getElementById('chat-messages').innerHTML =
     '<div class="chat-bubble system"><span class="chat-text">Chat with your opponent</span></div>';
   document.getElementById('chat-input').value = '';
@@ -3145,10 +3215,91 @@ function switchTab(tab){
   }
 }
 
+// ===================== AI CHAT BOT (vs Computer mode) =====================
+function initAIChat(){
+  chatUnreadCount = 0;
+  currentTab = 'history';
+  document.getElementById('chat-messages').innerHTML =
+    '<div class="chat-bubble system"><span class="chat-text">Chat with the Computer 🤖</span></div>';
+  document.getElementById('chat-input').value = '';
+  document.getElementById('chat-input').disabled = false;
+  document.getElementById('chat-input').placeholder = 'Say something to the Computer...';
+  document.getElementById('chat-unread').textContent = '0';
+  document.getElementById('chat-unread').classList.remove('show');
+  document.getElementById('panel-tab-chat').style.display = 'inline-flex';
+  document.getElementById('chat-mic-btn').style.display = 'none'; // no voice msgs vs AI
+  document.getElementById('emoji-bar').classList.add('show');     // emojis work locally
+  switchTab('history');
+  // Friendly greeting
+  setTimeout(()=>{
+    appendChatBubble('Computer', 'Good luck, '+playerName+'! May the best mind win. ♟', false);
+    bumpChatUnread();
+  }, 1200);
+}
+
+function aiChatReply(text){
+  const t = text.toLowerCase();
+  const diffName = ['Easy','Medium','Hard'][aiDiff-1] || 'Medium';
+  // Material balance from captures
+  const myPts  = G.captured[playerColor].reduce((a,p)=>a+PIECE_VALS[type(p)],0);
+  const aiPts  = G.captured[opp(playerColor)].reduce((a,p)=>a+PIECE_VALS[type(p)],0);
+  const moveNo = Math.ceil(G.history.length/2);
+
+  if(/\b(hi|hello|hey|vanakkam|namaste|hai)\b/.test(t))
+    return pick(['Hello '+playerName+'! Ready to lose? 😉','Hi there! Your move, human.','Hey! I have calculated 3 million positions while you typed that.']);
+  if(t.includes('how are you'))
+    return pick(['Running at optimal temperature, thanks!','All circuits happy. How about you?','Better than your position, probably. 😄']);
+  if(t.includes('hint') || t.includes('help') || t.includes('suggest')){
+    if(G.turn !== playerColor) return "It's my turn — no hints needed for me!";
+    const hm = getBestMove(1);
+    if(hm){
+      const files='abcdefgh';
+      return 'Hmm... maybe look at the piece on '+files[hm.from[1]]+(8-hm.from[0])+'. Just saying. 🤫';
+    }
+    return 'You are on your own for this one!';
+  }
+  if(t.includes('winning') || t.includes('score') || t.includes('who is better')){
+    if(myPts > aiPts) return 'You are up on material ('+myPts+' vs '+aiPts+'). Enjoy it while it lasts!';
+    if(aiPts > myPts) return 'I am ahead by '+(aiPts-myPts)+' points of material. Resistance is futile. 🤖';
+    return 'Dead even so far. The tension builds...';
+  }
+  if(t.includes('good move') || t.includes('nice') || t.includes('well played') || t.includes('great'))
+    return pick(['Thank you! I do try.','All in a day\'s computation.','You\'re not bad yourself!']);
+  if(t.includes('bad') || t.includes('weak') || t.includes('easy') || t.includes('noob'))
+    return pick(['Bold words for someone in my checkmate radius.','We shall see... we shall see.','Talk is cheap. Show me on the board!']);
+  if(t.includes('gg') || t.includes('good game') || t.includes('bye'))
+    return pick(['Good game! Rematch anytime.','GG! You played well.','Until next time, challenger.']);
+  if(t.includes('difficulty') || t.includes('level'))
+    return 'I am set to '+diffName+' mode. Change it from the menu if you dare go higher!';
+  if(isInCheck(G.board, playerColor)) return 'By the way... your king is in check. Just thought you should know. 😏';
+  if(t.includes('?'))
+    return pick(['Good question. My answer: play e4. Always e4.','I only compute chess, not philosophy!','42. The answer is always 42.']);
+  return pick([
+    'Move '+moveNo+' and the plot thickens...',
+    'Less chatting, more moving! ♟',
+    'I\'m analysing '+(1000+Math.floor(Math.random()*9000))+' positions per second while we chat.',
+    'Interesting strategy... talking instead of playing.',
+    'Focus, '+playerName+'! The board awaits.'
+  ]);
+}
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
 async function sendChat(){
   const input = document.getElementById('chat-input');
   const text = input.value.trim();
-  if(!text || !onlineRoom) return;
+  if(!text) return;
+  // ── vs Computer: local chat with the bot ──
+  if(gameMode==='ai'){
+    input.value = '';
+    appendChatBubble(playerName, text, true);
+    const reply = aiChatReply(text);
+    setTimeout(()=>{
+      appendChatBubble('Computer', reply, false);
+      bumpChatUnread();
+    }, 600 + Math.random()*900);
+    return;
+  }
+  if(!onlineRoom) return;
   // Block if spectator chat is muted
   if(isSpectator && !spectatorChatEnabled){
     appendSystemMessage('💬 Chat is muted by host.');
