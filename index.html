@@ -178,6 +178,7 @@ async function installPWA(){
   .diff-btns { display: flex; gap: 10px; justify-content: center; margin-bottom: 14px; flex-wrap: wrap; }
   .diff-btn { padding: 8px 22px; border: 1px solid var(--panel-border); background: var(--btn); color: var(--text); border-radius: 6px; cursor: pointer; font-family: 'Crimson Text', serif; font-size: 1rem; transition: background 0.15s; }
   .diff-btn:hover, .diff-btn.sel { background: var(--accent); color: #1a0a00; border-color: var(--accent); }
+  .diff-btn.lvl { padding: 8px 0; width: 48px; text-align: center; font-weight: 600; }
   .color-btns { display: flex; gap: 10px; justify-content: center; margin-bottom: 16px; }
   .color-btn { padding: 8px 22px; border: 1px solid var(--panel-border); background: var(--btn); color: var(--text); border-radius: 6px; cursor: pointer; font-family: 'Crimson Text', serif; font-size: 1rem; transition: background 0.15s; }
   .color-btn:hover, .color-btn.sel { background: var(--accent); color: #1a0a00; border-color: var(--accent); }
@@ -698,10 +699,17 @@ async function installPWA(){
   <div id="ai-options">
     <h3>Computer Settings</h3>
     <div class="diff-btns">
-      <button class="diff-btn sel" onclick="selDiff(1,this)" data-diff="1">Easy</button>
-      <button class="diff-btn" onclick="selDiff(2,this)" data-diff="2">Medium</button>
-      <button class="diff-btn" onclick="selDiff(3,this)" data-diff="3">Hard</button>
+      <button class="diff-btn lvl sel" onclick="selDiff(1,this)" data-diff="1">L1</button>
+      <button class="diff-btn lvl" onclick="selDiff(2,this)" data-diff="2">L2</button>
+      <button class="diff-btn lvl" onclick="selDiff(3,this)" data-diff="3">L3</button>
+      <button class="diff-btn lvl" onclick="selDiff(4,this)" data-diff="4">L4</button>
+      <button class="diff-btn lvl" onclick="selDiff(5,this)" data-diff="5">L5</button>
+      <button class="diff-btn lvl" onclick="selDiff(6,this)" data-diff="6">L6</button>
+      <button class="diff-btn lvl" onclick="selDiff(7,this)" data-diff="7">L7</button>
+      <button class="diff-btn lvl" onclick="selDiff(8,this)" data-diff="8">L8</button>
+      <button class="diff-btn lvl" onclick="selDiff(9,this)" data-diff="9">L9</button>
     </div>
+    <div id="lvl-hint" style="text-align:center; color:var(--text-muted); font-size:0.82rem; font-style:italic; margin:-6px 0 12px;">L1 = Beginner · L9 = Extremely hard</div>
     <p style="color:var(--text-muted);font-size:.9rem;margin-bottom:8px;">Play as:</p>
     <div class="color-btns">
       <button class="color-btn sel" onclick="selColor('white',this)">White ♔</button>
@@ -915,6 +923,7 @@ async function installPWA(){
     </div>
     <div class="gameover-btns">
       <button class="go-btn" onclick="backToMenu()">Menu</button>
+      <button class="go-btn" onclick="replayLastMoves()" id="replay-btn">▶ Replay</button>
       <button class="go-btn primary" onclick="rematch()">Rematch</button>
     </div>
   </div>
@@ -1345,6 +1354,8 @@ function newGame(){
   moveContributors = { w:{}, b:{} };
   undoCounts = {w:0, b:0};
   undoRequestPending = false;
+  historyStack = [];
+  isReplaying = false;
 }
 
 function boardKey(){
@@ -1478,7 +1489,11 @@ function applyMove(board,move,enPassant,castling){
       cap=b[capRow][nf];
       b[capRow][nf]=null;
     }
-    b[nr][nf]=move.promo?c+move.promo:p;
+    // Pawn reaching last rank ALWAYS promotes (default Queen if unspecified —
+    // critical for AI search: otherwise minimax sees promotion as worthless)
+    b[nr][nf] = (type(p)==='P' && (nr===0||nr===7))
+      ? c + (move.promo || 'Q')
+      : (move.promo ? c+move.promo : p);
     b[r][f]=null;
     if(type(p)==='P'&&Math.abs(nr-r)===2) ep=[r+Math.sign(nr-r),f];
   }
@@ -1584,7 +1599,16 @@ function evalBoard(board){
   return score;
 }
 
+// Time-limited search support (for L8/L9 — prevents browser freeze)
+let searchDeadline = 0, searchNodes = 0;
+function _checkTimeout(){
+  if(searchDeadline && (++searchNodes & 1023)===0 && Date.now() > searchDeadline){
+    throw 'search-timeout';
+  }
+}
+
 function minimax(board,depth,alpha,beta,maximizing,castling,enPassant){
+  _checkTimeout();
   const c=maximizing?'w':'b';
   const moves=getLegalMoves(board,c,castling,enPassant);
   if(depth===0||moves.length===0){
@@ -1638,6 +1662,25 @@ function getBestMove(depth){
     if(c==='w'?val>bestVal:val<bestVal){bestVal=val;bestMove=m;}
   }
   return bestMove;
+}
+
+// Iterative deepening within a time budget — searches deeper when the
+// position allows (endgames), stops early in complex middlegames.
+function getBestMoveTimed(maxDepth, timeMs){
+  const start = Date.now();
+  searchDeadline = start + timeMs;
+  searchNodes = 0;
+  let best = null;
+  try {
+    for(let d=1; d<=maxDepth; d++){
+      const m = getBestMove(d); // throws 'search-timeout' if budget exceeded
+      if(m) best = m;
+      // Next depth costs ~5-6x — skip it if we've used over a quarter of the budget
+      if(Date.now() - start > timeMs * 0.25) break;
+    }
+  } catch(e){ /* timeout mid-depth — keep best from last completed depth */ }
+  searchDeadline = 0; searchNodes = 0;
+  return best;
 }
 
 // ===================== GAME UI =====================
@@ -1802,6 +1845,7 @@ function updatePlayerBars(){
 }
 
 function updateStatus(){
+  if(isReplaying) return; // replay controls the status bar
   // Host waiting for opponent — show waiting message
   if(gameMode==='online' && G.gameOver && G.history.length===0){
     document.getElementById('status-bar').textContent='⏳ Waiting for opponent to join...';
@@ -1888,6 +1932,7 @@ function handleClick(r,f){
     }
     return;
   }
+  if(isReplaying) return; // no interaction during replay
   if(gameMode==='spectator') return; // spectators cannot move pieces
   if(gameMode==='ai'&&G.turn!==playerColor) return;
   if(gameMode==='online'&&G.turn!==myOnlineColor) return;
@@ -1946,6 +1991,12 @@ async function executeMove(move,toR,toF,fromOnline){
 }
 
 function doMove(move){
+  // AI/direct calls may lack promo on a promotion move — default to Queen
+  // (human promotions are intercepted earlier by executeMove's modal)
+  const mp = G.board[move.from[0]][move.from[1]];
+  if(type(mp)==='P' && (move.to[0]===0||move.to[0]===7) && !move.promo && !move.castle){
+    move.promo = 'Q';
+  }
   // Save state for undo
   historyStack.push({
     board:G.board.map(r=>[...r]),
@@ -2018,11 +2069,38 @@ function doMove(move){
   }
 }
 
+// 9 difficulty levels: search depth + blunder chance (probability of a random move)
+// L1 = beginner (shallow + many mistakes) ... L9 = extremely hard (deep + flawless)
+// L8/L9 use time-budgeted iterative deepening — deeper in endgames, never freezes.
+const AI_LEVELS = {
+  1: {depth:1, blunder:0.60},
+  2: {depth:1, blunder:0.35},
+  3: {depth:1, blunder:0.10},
+  4: {depth:2, blunder:0.25},
+  5: {depth:2, blunder:0.05},
+  6: {depth:3, blunder:0.15},
+  7: {depth:3, blunder:0.00},
+  8: {depth:4, blunder:0.05, time:2000},
+  9: {depth:5, blunder:0.00, time:3500}
+};
+
 function runAI(){
   if(G.gameOver) return;
-  const depth=aiDiff===1?1:aiDiff===2?2:3;
-  const m=getBestMove(depth);
+  const lvl = AI_LEVELS[aiDiff] || AI_LEVELS[5];
+  // Blunder: lower levels sometimes play a random legal move
+  if(lvl.blunder > 0 && Math.random() < lvl.blunder){
+    const moves = getLegalMoves(G.board, G.turn, G.castling, G.enPassant);
+    if(moves.length){ doMove(moves[Math.floor(Math.random()*moves.length)]); return; }
+  }
+  const m = lvl.time
+    ? getBestMoveTimed(lvl.depth, lvl.time)
+    : getBestMove(lvl.depth);
   if(m) doMove(m);
+  else {
+    // Safety fallback — should never happen, but never leave AI frozen
+    const moves = getLegalMoves(G.board, G.turn, G.castling, G.enPassant);
+    if(moves.length) doMove(moves[0]);
+  }
 }
 
 // ===================== PROMOTION =====================
@@ -2074,7 +2152,7 @@ function performUndoSteps(steps){
 }
 
 function undoMove(){
-  if(gameMode==='spectator') return;
+  if(gameMode==='spectator' || isReplaying) return;
   if(gameMode==='online'){
     // Online: request opponent's permission, max 2 undos per player
     if(G.gameOver){ return; }
@@ -2229,7 +2307,7 @@ function startAI(){
   G.mode='ai'; G.aiDiff=aiDiff; G.playerColor=playerColor;
   document.getElementById('name-white').textContent = playerColor==='w' ? playerName : 'Computer';
   document.getElementById('name-black').textContent = playerColor==='b' ? playerName : 'Computer';
-  document.getElementById('game-title').textContent='vs Computer ('+['','Easy','Medium','Hard'][aiDiff]+')';
+  document.getElementById('game-title').textContent='vs Computer (L'+aiDiff+')';
   document.getElementById('online-side').style.display='none';
   document.getElementById('undo-btn').style.display='';
   historyStack=[]; lastMove=null; selected=null; legalMovesForSel=[];
@@ -3240,7 +3318,7 @@ function initAIChat(){
 
 function aiChatReply(text){
   const t = text.toLowerCase();
-  const diffName = ['Easy','Medium','Hard'][aiDiff-1] || 'Medium';
+  const diffName = 'L'+aiDiff+(aiDiff>=8?' (my strongest!)':aiDiff<=2?' (taking it easy on you)':'');
   // Material balance from captures
   const myPts  = G.captured[playerColor].reduce((a,p)=>a+PIECE_VALS[type(p)],0);
   const aiPts  = G.captured[opp(playerColor)].reduce((a,p)=>a+PIECE_VALS[type(p)],0);
@@ -4024,6 +4102,75 @@ function buildGameStats(title, msg){
   document.getElementById('go-stats-content').innerHTML = html;
   document.getElementById('go-stats').style.display = 'block';
 }
+// ===================== REPLAY LAST 5 MOVES =====================
+let isReplaying = false;
+let REPLAY_DELAY = 1300; // ms between frames
+
+function _replayDiff(prev, next){
+  // Find from (became empty) and to (changed to a piece) squares for highlight
+  let from=null, to=null;
+  for(let r=0;r<8;r++) for(let f=0;f<8;f++){
+    if(prev[r][f] !== next[r][f]){
+      if(next[r][f]===null && !from) from=[r,f];
+      else if(next[r][f]!==null) to=[r,f];
+    }
+  }
+  return (from && to) ? {from, to} : null;
+}
+
+function replayLastMoves(){
+  if(isReplaying) return;
+  const n = Math.min(5, historyStack.length);
+  if(n === 0) return;
+  isReplaying = true;
+
+  // Frames: board BEFORE each of the last n moves, then the final board
+  const frames = [];
+  for(let i = historyStack.length - n; i < historyStack.length; i++){
+    frames.push(historyStack[i].board);
+  }
+  frames.push(G.board);
+  const notations = G.history.slice(-n);
+
+  // Save real state to restore afterwards
+  const realBoard = G.board;
+  const realLastMove = lastMove;
+
+  closeModal('gameover-modal');
+
+  let step = 0; // 0 = starting frame, 1..n = moves
+  function showFrame(){
+    if(!isReplaying) return; // cancelled (e.g. user clicked Menu)
+    G.board = frames[step];
+    if(step === 0){
+      lastMove = null;
+      document.getElementById('status-bar').textContent =
+        '▶ Replay — position before last '+n+' move'+(n>1?'s':'');
+    } else {
+      lastMove = _replayDiff(frames[step-1], frames[step]);
+      document.getElementById('status-bar').textContent =
+        '▶ Replay '+step+'/'+n+':  '+notations[step-1];
+    }
+    renderBoard();
+    step++;
+    if(step <= n){
+      setTimeout(showFrame, REPLAY_DELAY);
+    } else {
+      // Done — restore real state and re-show the result
+      setTimeout(()=>{
+        if(!isReplaying) return; // cancelled
+        G.board = realBoard;
+        lastMove = realLastMove;
+        renderBoard();
+        isReplaying = false;
+        document.getElementById('status-bar').textContent = 'Game over';
+        openModal('gameover-modal');
+      }, REPLAY_DELAY);
+    }
+  }
+  showFrame();
+}
+
 function showGameOver(title, msg){
   if(gameOverFired) return;
   gameOverFired = true;
@@ -4031,6 +4178,8 @@ function showGameOver(title, msg){
 
   document.getElementById('go-title').textContent = title;
   document.getElementById('go-msg').textContent = msg;
+  // Replay button only when there are moves to replay
+  document.getElementById('replay-btn').style.display = historyStack.length > 0 ? '' : 'none';
   // Build post-game contributor stats
   buildGameStats(title, msg);
   // Open modal via class only — backToMenu/rematch will clear it properly
@@ -4063,7 +4212,7 @@ function showGameOver(title, msg){
     recordGame(p1result, localP2Name, 'local', totalMoves);
   } else {
     const oppName = gameMode==='ai'
-      ? 'Computer ('+ ['','Easy','Medium','Hard'][aiDiff]+')'
+      ? 'Computer (L'+aiDiff+')'
       : 'Online Opponent';
     recordGame(result, oppName, gameMode, totalMoves);
   }
@@ -4096,6 +4245,7 @@ async function exitWatch(){
 }
 
 async function backToMenu(){
+  isReplaying = false; // cancel any running replay
   // If online game in progress — confirm and save state
   if(gameMode==='online' && G.history && G.history.length > 0 && !G.gameOver){
     if(!confirm('Leave game? Your progress will be saved for 30 minutes.\nUse the same room code to rejoin and resume.')){
